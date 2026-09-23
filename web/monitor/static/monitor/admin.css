@@ -1,0 +1,190 @@
+html[data-theme="light"],
+html[data-theme="dark"],
+:root {
+  --primary: #09090b;
+  --secondary: #09090b;
+  --accent: #2563eb;
+  --primary-fg: #fafafa;
+
+  --body-fg: #09090b;
+  --body-bg: #fafafa;
+  --body-quiet-color: #71717a;
+  --body-medium-color: #3f3f46;
+  --body-loud-color: #09090b;
+
+  --header-color: #09090b;
+  --header-branding-color: #09090b;
+  --header-bg: rgba(250, 250, 250, 0.92);
+  --header-link-color: #09090b;
+
+  --breadcrumbs-fg: #71717a;
+  --breadcrumbs-link-fg: #09090b;
+  --breadcrumbs-bg: transparent;
+
+  --link-fg: #2563eb;
+  --link-hover-color: #1d4ed8;
+  --link-selected-fg: #09090b;
+
+  --hairline-color: #e4e4e7;
+  --border-color: #e4e4e7;
+
+  --error-fg: #e11d48;
+  --message-success-bg: #ecfdf5;
+  --message-warning-bg: #fffbeb;
+  --message-error-bg: #fff1f2;
+
+  --darkened-bg: #ffffff;
+  --selected-bg: #f4f4f5;
+  --selected-row: #eff6ff;
+
+  --button-fg: #fafafa;
+  --button-bg: #09090b;
+  --button-hover-bg: #27272a;
+  --default-button-bg: #09090b;
+  --default-button-hover-bg: #27272a;
+  --close-button-bg: #ffffff;
+  --close-button-fg: #09090b;
+  --close-button-hover-bg: #f4f4f5;
+  --delete-button-bg: #e11d48;
+  --delete-button-hover-bg: #be123c;
+
+  --object-tools-fg: #09090b;
+  --object-tools-bg: #ffffff;
+  --object-tools-hover-bg: #f4f4f5;
+  --object-tools-hover-color: #09090b;
+
+  --font-family-primary: "Outfit", "Segoe UI", sans-serif;
+  --font-family-monospace: "JetBrains Mono", ui-monospace, Consolas, monospace;
+
+  color-scheme: light;
+}
+
+body {
+  background:
+    radial-gradient(900px 420px at 10% -10%, rgba(37, 99, 235, 0.08), transparent 55%),
+    var(--body-bg);
+  font-size: 15px;
+}
+
+#header {
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: none;
+}
+
+#branding h1, #site-name a {
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: #09090b;
+}
+
+#user-tools, #user-tools a {
+  color: #71717a;
+  font-family: var(--font-family-monospace);
+  font-size: 12px;
+}
+
+div.breadcrumbs {
+  padding-left: 24px;
+  border-bottom: 1px solid transparent;
+}
+
+#content {
+  width: min(1120px, calc(100% - 32px));
+  margin: 12px auto 48px;
+}
+
+.module, fieldset.module, .inline-group {
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.module h2, .module caption, .inline-group h2 {
+  background: #fff;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 560;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#content-main .module table {
+  border-radius: 18px;
+}
+
+.dashboard .module table th, .dashboard .module table td {
+  border-bottom: 1px solid var(--hairline-color);
+}
+
+a.section, .button, input[type="submit"], input[type="button"], .submit-row input, button {
+  border-radius: 999px;
+}
+
+.submit-row {
+  background: transparent;
+  border: 0;
+  padding-left: 0;
+}
+
+.submit-row input.default {
+  border-radius: 999px;
+}
+
+#changelist .results, #changelist-filter, .paginator {
+  border-color: var(--border-color);
+}
+
+#changelist-filter {
+  background: #fff;
+  border-radius: 18px;
+  border: 1px solid var(--border-color);
+}
+
+.object-tools a {
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  color: #09090b;
+}
+
+.form-row {
+  border-bottom-color: var(--hairline-color);
+}
+
+.grant-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.grant-list label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: #fff;
+  font-family: var(--font-family-monospace);
+  font-size: 12px;
+}
+
+.selector-chosen h2, .selector-available h2 {
+  background: #fafafa;
+  color: #09090b;
+}
+
+.login {
+  background: #fafafa;
+}
+
+.login #container {
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  box-shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.45);
+}
+
+.theme-toggle {
+  display: none;
+}

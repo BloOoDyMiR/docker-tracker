@@ -12,14 +12,12 @@
       <p class="errornote">{{ container_warning }}</p>
     {% endif %}
     {% if container_choices %}
-      <div>
+      <div class="grant-list">
         {% for value, label in container_choices %}
-          <div style="margin: 6px 0;">
-            <label>
-              <input type="checkbox" name="container_grants" value="{{ value }}" {% if value in selected_containers %}checked{% endif %}>
-              {{ label }}
-            </label>
-          </div>
+          <label>
+            <input type="checkbox" name="container_grants" value="{{ value }}" {% if value in selected_containers %}checked{% endif %}>
+            {{ label }}
+          </label>
         {% endfor %}
       </div>
     {% else %}

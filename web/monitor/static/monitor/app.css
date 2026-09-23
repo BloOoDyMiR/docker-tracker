@@ -22,6 +22,8 @@
 
 * { box-sizing: border-box; }
 
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -37,6 +39,11 @@ a { color: inherit; }
 main {
   width: min(1120px, calc(100% - 32px));
   margin: 0 auto 72px;
+}
+
+main.wide {
+  width: calc(100% - 40px);
+  max-width: none;
 }
 
 h1 {
@@ -114,7 +121,7 @@ button:hover { background: #27272a; }
 
 .narrow {
   width: min(440px, 100%);
-  margin-top: 12vh;
+  margin: 12vh auto 0;
   padding: 28px;
   background: var(--card);
   border: 1px solid var(--line);
@@ -152,7 +159,7 @@ button:hover { background: #27272a; }
 
 .board {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   gap: 14px;
   margin-top: 22px;
 }
@@ -161,7 +168,8 @@ button:hover { background: #27272a; }
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-height: 210px;
+  min-height: 168px;
+  min-width: 0;
   padding: 18px;
   text-decoration: none;
   background: var(--card);
@@ -188,9 +196,10 @@ button:hover { background: #27272a; }
 .widget h2 {
   margin: 4px 0 0;
   color: var(--ink);
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   letter-spacing: -0.03em;
   text-transform: none;
+  overflow-wrap: anywhere;
 }
 
 .widget .image {
@@ -272,6 +281,19 @@ pre.file, #logs, .answer {
   font-size: 0.82rem;
 }
 
+.log-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.log-tools button {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 6px 12px;
+}
+
 .explain {
   display: flex;
   flex-wrap: wrap;
@@ -280,12 +302,95 @@ pre.file, #logs, .answer {
   margin-top: 22px;
 }
 
+#explain-panel { margin-top: 14px; }
+
+.answer { min-height: 4.5rem; }
+
+.loader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 2px solid var(--line);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
 @keyframes rise {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: none; }
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (min-width: 1800px) {
+  main.wide { width: calc(100% - 56px); }
+  .board { gap: 12px; }
+  .widget {
+    min-height: 0;
+    padding: 14px 16px;
+    border-radius: 18px;
+  }
+}
+
+@media (max-width: 720px) {
+  .top {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px 14px;
+  }
+
+  .top nav { flex-wrap: wrap; gap: 10px 14px; }
+
+  main, main.wide {
+    width: calc(100% - 20px);
+    margin-bottom: 40px;
+  }
+
+  h1 { font-size: 1.55rem; }
+
+  .title-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .board { grid-template-columns: 1fr; gap: 10px; }
+
+  .widget { min-height: 0; padding: 16px; }
+
+  .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .facts dd { overflow-wrap: anywhere; }
+
+  table { display: block; overflow-x: auto; }
+
+  #logs { max-height: 280px; font-size: 0.75rem; }
+
+  .explain { align-items: stretch; }
+  .explain button { width: 100%; }
+  .explain .hint { flex-basis: 100%; }
+
+  .narrow { margin-top: 8vh; padding: 22px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .widget { animation: none; }
   .widget:hover { transform: none; }
+  .spinner { animation: none; }
 }

@@ -1,20 +1,20 @@
+import json
 import re
 
-from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
 from django.contrib.messages import get_messages
-from django.http import Http404, JsonResponse
+from django.db import close_old_connections
+from django.http import Http404, JsonResponse, StreamingHttpResponse
 from django.middleware.csrf import get_token
 from django.views.decorators.http import require_POST
-from django.shortcuts import redirect
 
 from .models import ContainerNote
 from .present import present_container
 from .rendering import render_page
 from .services import agent as agent_api
 from .services.agent import AgentError
-from .services.llm import LLMError, LLMNotConfigured, configured, explain
+from .services.llm import LLMError, LLMNotConfigured, configured, explain_chunks
 
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,200}$")
 
@@ -68,8 +68,24 @@ def _env_payload(note):
     ]
 
 
-def _session_key(name):
-    return f"explain:{name}"
+NOT_CONFIGURED = (
+    "Set the model server in the .env file, then restart Django. "
+    "A local server can leave the token empty.\n"
+    "LLM_API_BASE=http://192.168.0.200:8880/v1\n"
+    "LLM_API_TOKEN=\n"
+    "LLM_MODEL=qwen"
+)
+
+
+def _sse(payload):
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode()
+
+
+def _event_stream(chunks):
+    response = StreamingHttpResponse(chunks, content_type="text/event-stream; charset=utf-8")
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
+    return response
 
 
 def _empty_detail(request, name, error):
@@ -150,43 +166,46 @@ def container_logs(request, name):
 @require_POST
 def explain_submit(request, name):
     _require_allowed(request.user, name)
-    key = _session_key(name)
     note = _note(name)
     if not configured():
-        request.session[key] = {"configured": False, "answer": "", "error": ""}
-        return redirect("monitor:explain", name=name)
+        return _event_stream(iter([_sse({"error": NOT_CONFIGURED})]))
     try:
         payload = agent_api.get_container(name)
         logs = agent_api.get_logs(name)
     except AgentError as exc:
-        request.session[key] = {"configured": True, "answer": "", "error": str(exc)}
-        return redirect("monitor:explain", name=name)
+        return _event_stream(iter([_sse({"error": str(exc)})]))
     container = payload.get("container") if isinstance(payload, dict) else {}
-    try:
-        answer = explain(
-            status=container if isinstance(container, dict) else {},
-            logs=logs,
-            dockerfile=note.dockerfile if note else "",
-            env_names=_env_payload(note),
-        )
-    except LLMNotConfigured:
-        request.session[key] = {"configured": False, "answer": "", "error": ""}
-    except LLMError as exc:
-        request.session[key] = {"configured": True, "answer": "", "error": str(exc)}
-    else:
-        request.session[key] = {"configured": True, "answer": answer, "error": ""}
-    return redirect("monitor:explain", name=name)
+    status = container if isinstance(container, dict) else {}
+    dockerfile = note.dockerfile if note else ""
+    env_names = _env_payload(note)
 
+    def chunks():
+        close_old_connections()
+        total = 0
+        try:
+            for piece in explain_chunks(
+                status=status,
+                logs=logs,
+                dockerfile=dockerfile,
+                env_names=env_names,
+            ):
+                if not piece:
+                    continue
+                room = 8000 - total
+                if room <= 0:
+                    break
+                text = piece[:room]
+                total += len(text)
+                yield _sse({"text": text})
+        except LLMNotConfigured:
+            yield _sse({"error": NOT_CONFIGURED})
+            return
+        except LLMError as exc:
+            yield _sse({"error": str(exc)})
+            return
+        if total == 0:
+            yield _sse({"error": "The model returned an empty response."})
+            return
+        yield _sse({"done": True})
 
-@login_required
-def explain_result(request, name):
-    _require_allowed(request.user, name)
-    return render_page(
-        request,
-        "explain.html",
-        {
-            "name": name,
-            "saved": request.session.get(_session_key(name)),
-            "llm_model": settings.LLM_MODEL,
-        },
-    )
+    return _event_stream(chunks())

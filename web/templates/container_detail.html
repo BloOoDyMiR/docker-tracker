@@ -51,16 +51,24 @@
   <section>
     <div class="title-row">
       <h2>Logs</h2>
-      <span class="meta" id="log-state">Last 200 lines, refreshing every 3 seconds</span>
+      <span class="log-tools">
+        <span class="meta" id="log-state">Live · 30s</span>
+        <button type="button" id="log-resume" hidden>Resume</button>
+      </span>
     </div>
     <pre id="logs" data-url="{{ url('monitor:container_logs', container.name) }}">{{ logs }}</pre>
     <p class="hint" id="logs-empty" {% if logs %}hidden{% endif %}>No log lines yet.</p>
   </section>
 
-  <form method="post" action="{{ url('monitor:explain_submit', container.name) }}" class="explain">
+  <form method="post" action="{{ url('monitor:explain_submit', container.name) }}" class="explain" id="explain-form">
     <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
-    <button type="submit">Explain with LLM</button>
-    <span class="hint">Sends status, redacted logs, and any stored Dockerfile. This can take a minute.</span>
+    <button type="submit" id="explain-button">Explain with LLM</button>
+    <span class="hint">Sends status, redacted logs, and any stored Dockerfile. The answer stays on this page.</span>
   </form>
+  <section id="explain-panel" hidden>
+    <p class="loader" id="explain-loader"><span class="spinner" aria-hidden="true"></span> Asking the model…</p>
+    <div class="answer" id="explain-answer" hidden></div>
+    <p class="error" id="explain-error" hidden></p>
+  </section>
 {% endif %}
 {% endblock %}
