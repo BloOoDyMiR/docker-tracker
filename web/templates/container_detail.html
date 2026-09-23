@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{% if container %}{{ container.name }}{% else %}{{ name }}{% endif %} · Docker Track{% endblock %}
+{% block content %}
+<p class="crumb"><a href="{{ url('monitor:dashboard') }}">Containers</a></p>
+{% if error %}
+  <h1>{{ name }}</h1>
+  <p class="error">{{ error }}</p>
+{% else %}
+  <div class="title-row">
+    <div>
+      <p class="kicker"><span class="dot {{ container.tone }}"></span> {{ container.status }}</p>
+      <h1>{{ container.name }}</h1>
+      <p class="image">{{ container.image }} · {{ container.short_id }}</p>
+    </div>
+  </div>
+  <dl class="facts">
+    <div><dt>Health</dt><dd>{{ container.health_display }}</dd></div>
+    <div><dt>Restarts</dt><dd>{{ container.restart_count }}</dd></div>
+    <div><dt>Exit code</dt><dd>{{ container.exit_code }}</dd></div>
+    <div><dt>OOM killed</dt><dd>{{ container.oom_display }}</dd></div>
+    <div><dt>Started</dt><dd>{{ container.started_display }}</dd></div>
+    <div><dt>Finished</dt><dd>{{ container.finished_display }}</dd></div>
+    <div><dt>CPU</dt><dd>{% if stats.cpu_percent is not none %}{{ stats.cpu_percent }}%{% else %}unavailable{% endif %}</dd></div>
+    <div><dt>Memory</dt><dd>{% if stats.mem_usage_mb is not none %}{{ stats.mem_usage_mb }} / {{ stats.mem_limit_mb }} MB{% else %}unavailable{% endif %}</dd></div>
+  </dl>
+
+  {% if note and note.env_flags.all() %}
+  <section>
+    <h2>Env names</h2>
+    <table>
+      <thead><tr><th>Name</th><th>State</th></tr></thead>
+      <tbody>
+        {% for item in note.env_flags.all() %}
+          <tr>
+            <td><code>{{ item.name }}</code></td>
+            <td>{% if item.is_set %}set{% else %}missing{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  {% if note and note.dockerfile %}
+  <section>
+    <h2>Dockerfile</h2>
+    <pre class="file">{{ note.dockerfile }}</pre>
+  </section>
+  {% endif %}
+
+  <section>
+    <div class="title-row">
+      <h2>Logs</h2>
+      <span class="meta" id="log-state">Last 200 lines, refreshing every 3 seconds</span>
+    </div>
+    <pre id="logs" data-url="{{ url('monitor:container_logs', container.name) }}">{{ logs }}</pre>
+    <p class="hint" id="logs-empty" {% if logs %}hidden{% endif %}>No log lines yet.</p>
+  </section>
+
+  <form method="post" action="{{ url('monitor:explain_submit', container.name) }}" class="explain">
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+    <button type="submit">Explain with LLM</button>
+    <span class="hint">Sends status, redacted logs, and any stored Dockerfile. This can take a minute.</span>
+  </form>
+{% endif %}
+{% endblock %}

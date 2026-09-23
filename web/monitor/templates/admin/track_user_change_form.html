@@ -1,0 +1,30 @@
+{% extends "admin/change_form.html" %}
+
+{% block after_field_sets %}
+<fieldset class="module aligned">
+  <h2>Containers this user can see</h2>
+  <div class="form-row">
+    <p>
+      Tick the containers from this Docker host. Superusers still see every container.
+      Names are saved, so a recreated container with the same name stays assigned.
+    </p>
+    {% if container_warning %}
+      <p class="errornote">{{ container_warning }}</p>
+    {% endif %}
+    {% if container_choices %}
+      <div>
+        {% for value, label in container_choices %}
+          <div style="margin: 6px 0;">
+            <label>
+              <input type="checkbox" name="container_grants" value="{{ value }}" {% if value in selected_containers %}checked{% endif %}>
+              {{ label }}
+            </label>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p>The agent did not return any containers.</p>
+    {% endif %}
+  </div>
+</fieldset>
+{% endblock %}

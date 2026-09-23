@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Containers · Docker Track{% endblock %}
+{% block content %}
+<div class="title-row">
+  <div>
+    <p class="kicker">Docker host</p>
+    <h1>Containers</h1>
+  </div>
+  <p class="meta">{{ containers|length }} shown</p>
+</div>
+{% if sees_all %}
+  <p class="hint">You see every container on this host. Assign a subset from Admin, under the user.</p>
+{% else %}
+  <p class="hint">These are the containers an admin assigned to you.</p>
+{% endif %}
+{% if agent_error %}
+  <p class="error">{{ agent_error }}</p>
+{% endif %}
+{% if containers %}
+  <div class="board">
+    {% for container in containers %}
+      <a class="widget" href="{{ url('monitor:container_detail', container.name) }}" style="animation-delay: {{ loop.index0 * 0.04 }}s">
+        <header>
+          <span class="dot {{ container.tone }}"></span>
+          <span class="status {{ container.tone }}">{{ container.status }}</span>
+          <span class="meta">{{ container.short_id }}</span>
+        </header>
+        <h2>{{ container.name }}</h2>
+        <p class="image">{{ container.image }}</p>
+        <dl>
+          <div><dt>Health</dt><dd>{{ container.health_display }}</dd></div>
+          <div><dt>Restarts</dt><dd>{{ container.restart_count }}</dd></div>
+          <div><dt>Exit</dt><dd>{{ container.exit_code }}</dd></div>
+        </dl>
+      </a>
+    {% endfor %}
+  </div>
+{% elif not agent_error %}
+  <p class="empty">No containers yet. An admin ticks them on your user in Admin.</p>
+{% endif %}
+{% endblock %}

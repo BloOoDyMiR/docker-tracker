@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>{% block title %}Docker Track{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ static('monitor/app.css') }}">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="{{ url('monitor:dashboard') }}">Docker Track</a>
+    {% if user.is_authenticated %}
+    <nav>
+      {% if user.is_staff %}
+        <a href="{{ url('admin:index') }}">Admin</a>
+      {% endif %}
+      <span class="who">{{ user.get_username() }}</span>
+      <form method="post" action="{{ url('logout') }}">
+        <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+        <button type="submit" class="linkish">Log out</button>
+      </form>
+    </nav>
+    {% endif %}
+  </header>
+  <main>
+    {% for message in messages %}
+      <p class="message">{{ message }}</p>
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+  <script src="{{ static('monitor/app.js') }}"></script>
+</body>
+</html>
