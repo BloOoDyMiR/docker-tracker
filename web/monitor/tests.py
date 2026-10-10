@@ -212,4 +212,5 @@ class ExplainTests(TestCase):
         self.assertEqual(body["max_tokens"], 1200)
         self.assertEqual(body["effort"], "low")
         self.assertEqual(body["chat_template_kwargs"], {"enable_thinking": False})
+        self.assertIn("Nothing suspicious. The app is up.", body["messages"][0]["content"])
         self.assertNotIn("Authorization", client.stream.call_args.kwargs["headers"])

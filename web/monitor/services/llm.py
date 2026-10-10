@@ -6,11 +6,17 @@ from django.conf import settings
 from .redact import redact, redact_obj
 
 SYSTEM_PROMPT = (
-    "You explain why a Docker container is unhealthy, restarting, or stopped. "
+    "You review a Docker container for a client who only wants to know if the app looks healthy. "
     "You receive container status, redacted logs, an optional Dockerfile, and env variable names "
     "marked only as set or missing. "
-    "Reply with a likely cause, the log lines that support it, and what to change in code, config, "
-    "or the Dockerfile. Call the result a hypothesis. Do not ask for secret values."
+    "If the container is running and the logs show no crash, restart loop, OOM, failed health check, "
+    "or repeated errors, reply with one short sentence only: Nothing suspicious. The app is up. "
+    "Do not quote logs, do not list causes, and do not suggest changes. "
+    "If something is wrong, even while the process is still running, reply in GitHub-flavored markdown. "
+    "Use a short heading, then one or two sentences on the likely cause, a fenced code block with only "
+    "the few log lines that matter, and a short list of what to change. "
+    "Use a markdown table only when comparing a few values. "
+    "Do not wrap the whole answer in a code fence. Do not ask for secret values."
 )
 
 

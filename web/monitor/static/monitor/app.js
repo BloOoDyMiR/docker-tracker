@@ -82,6 +82,104 @@ if (logEl && logEl.dataset.url) {
   start();
 }
 
+function escapeHtml(text) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderInline(text) {
+  let html = escapeHtml(text);
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+  html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+  return html;
+}
+
+function splitRow(line) {
+  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+}
+
+function isRule(line) {
+  const cells = splitRow(line);
+  return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function renderMarkdown(source) {
+  const lines = source.replace(/\r\n/g, "\n").split("\n");
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim().startsWith("```")) {
+      const buf = [];
+      i += 1;
+      while (i < lines.length && !lines[i].trim().startsWith("```")) {
+        buf.push(lines[i]);
+        i += 1;
+      }
+      if (i < lines.length) {
+        i += 1;
+      }
+      out.push(`<pre><code>${escapeHtml(buf.join("\n"))}</code></pre>`);
+      continue;
+    }
+    if (line.trim().startsWith("|") && i + 1 < lines.length && isRule(lines[i + 1])) {
+      const header = splitRow(line);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        rows.push(splitRow(lines[i]));
+        i += 1;
+      }
+      const head = header.map((cell) => `<th>${renderInline(cell)}</th>`).join("");
+      const body = rows
+        .map((row) => `<tr>${row.map((cell) => `<td>${renderInline(cell)}</td>`).join("")}</tr>`)
+        .join("");
+      out.push(`<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`);
+      continue;
+    }
+    const heading = /^(#{1,3})\s+(.+)$/.exec(line);
+    if (heading) {
+      const level = heading[1].length + 1;
+      out.push(`<h${level}>${renderInline(heading[2])}</h${level}>`);
+      i += 1;
+      continue;
+    }
+    if (/^\s*([-*]|\d+\.)\s+/.test(line)) {
+      const ordered = /^\s*\d+\.\s+/.test(line);
+      const items = [];
+      const itemRe = ordered ? /^\s*\d+\.\s+/ : /^\s*[-*]\s+/;
+      while (i < lines.length && itemRe.test(lines[i])) {
+        items.push(`<li>${renderInline(lines[i].replace(itemRe, ""))}</li>`);
+        i += 1;
+      }
+      const tag = ordered ? "ol" : "ul";
+      out.push(`<${tag}>${items.join("")}</${tag}>`);
+      continue;
+    }
+    if (!line.trim()) {
+      i += 1;
+      continue;
+    }
+    const para = [line];
+    i += 1;
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !/^(#{1,3}\s|```|\s*([-*]|\d+\.)\s+|\s*\|)/.test(lines[i])
+    ) {
+      para.push(lines[i]);
+      i += 1;
+    }
+    out.push(`<p>${renderInline(para.join(" "))}</p>`);
+  }
+  return out.join("");
+}
+
 const explainForm = document.querySelector("#explain-form");
 
 if (explainForm) {
@@ -125,6 +223,7 @@ if (explainForm) {
       errorEl.textContent = "";
     }
 
+    let paintTimer = 0;
     try {
       const response = await fetch(explainForm.action, {
         method: "POST",
@@ -139,7 +238,12 @@ if (explainForm) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let markdown = "";
       let started = false;
+      let failed = false;
+      const paint = () => {
+        answer.innerHTML = renderMarkdown(markdown);
+      };
       while (true) {
         const step = await reader.read();
         if (step.done) {
@@ -160,6 +264,7 @@ if (explainForm) {
             continue;
           }
           if (data.error) {
+            failed = true;
             showError(data.error);
             return;
           }
@@ -171,16 +276,24 @@ if (explainForm) {
               }
               answer.hidden = false;
             }
-            answer.textContent += data.text;
+            markdown += data.text;
+            window.clearTimeout(paintTimer);
+            paintTimer = window.setTimeout(paint, 80);
           }
         }
       }
-      if (!started && errorEl && errorEl.hidden) {
+      if (!started && !failed && errorEl && errorEl.hidden) {
         showError("The model returned an empty response.");
       }
+      window.clearTimeout(paintTimer);
+      if (started && !failed) {
+        paint();
+      }
     } catch (err) {
+      window.clearTimeout(paintTimer);
       showError("The model request failed.");
     } finally {
+      window.clearTimeout(paintTimer);
       button.disabled = false;
     }
   });
