@@ -52,14 +52,20 @@
     <div class="title-row">
       <h2>Logs</h2>
       <span class="log-tools">
-        <span class="meta" id="log-state">Live · 30s</span>
-        <button type="button" id="log-resume" hidden>Resume</button>
+        <span class="meta" id="log-state">Last 200 lines</span>
+        <button type="button" id="log-live">Live</button>
       </span>
     </div>
     <div class="log-tools log-actions">
       <button type="button" data-tail="1000">Last 1000</button>
       <button type="button" data-tail="2000">Last 2000</button>
       <button type="button" id="log-download">Download .txt</button>
+      <span id="log-download-choices" hidden>
+        <button type="button" data-download="200">200</button>
+        <button type="button" data-download="500">500</button>
+        <button type="button" data-download="1000">1000</button>
+        <button type="button" data-download="2000">2000</button>
+      </span>
       <label class="log-check"><input type="checkbox" id="log-hide-health"> Hide health checks</label>
     </div>
     <pre id="logs" data-url="{{ url('monitor:container_logs', container.name) }}" data-name="{{ container.name }}">{{ logs }}</pre>

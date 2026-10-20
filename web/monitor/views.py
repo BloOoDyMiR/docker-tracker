@@ -17,7 +17,7 @@ from .services.agent import AgentError
 from .services.llm import LLMError, LLMNotConfigured, configured, explain_chunks
 
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,200}$")
-LOG_TAILS = {200, 1000, 2000}
+LOG_TAILS = {200, 500, 1000, 2000}
 
 
 class PageLoginView(LoginView):

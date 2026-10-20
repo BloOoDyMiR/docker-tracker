@@ -131,14 +131,20 @@ class MonitorPageTests(TestCase):
         self.assertContains(response, "Last 1000")
         self.assertContains(response, "Last 2000")
         self.assertContains(response, "Download .txt")
+        self.assertContains(response, 'id="log-live"')
+        self.assertContains(response, 'data-download="500"')
         self.assertContains(response, "Hide health checks")
         get_logs.assert_called_once()
 
     @patch("monitor.views.agent_api.get_logs", return_value="line\n")
-    def test_log_tail_only_allows_200_1000_2000(self, get_logs):
+    def test_log_tail_only_allows_known_sizes(self, get_logs):
         self.client.force_login(self.owner)
-        ok = self.client.get(reverse("monitor:container_logs", args=["shop-web"]) + "?tail=2000")
+        ok = self.client.get(reverse("monitor:container_logs", args=["shop-web"]) + "?tail=500")
         self.assertEqual(ok.status_code, 200)
+        get_logs.assert_called_once_with("shop-web", tail=500)
+        get_logs.reset_mock()
+        wide = self.client.get(reverse("monitor:container_logs", args=["shop-web"]) + "?tail=2000")
+        self.assertEqual(wide.status_code, 200)
         get_logs.assert_called_once_with("shop-web", tail=2000)
         get_logs.reset_mock()
         limited = self.client.get(reverse("monitor:container_logs", args=["shop-web"]) + "?tail=99999")

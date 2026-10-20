@@ -6,9 +6,10 @@ const HEALTH_LINE = /(?:GET|HEAD)\s+\/(?:healthz?|readyz?|livez?)(?:[/?\s"']|$)/
 if (logEl && logEl.dataset.url) {
   const emptyEl = document.querySelector("#logs-empty");
   const stateEl = document.querySelector("#log-state");
-  const resumeEl = document.querySelector("#log-resume");
+  const liveEl = document.querySelector("#log-live");
   const hideEl = document.querySelector("#log-hide-health");
   const downloadEl = document.querySelector("#log-download");
+  const downloadChoices = document.querySelector("#log-download-choices");
   let poll = 0;
   let clock = 0;
   let endsAt = 0;
@@ -73,24 +74,37 @@ if (logEl && logEl.dataset.url) {
     if (stateEl) {
       stateEl.textContent = message;
     }
-    if (resumeEl) {
-      resumeEl.hidden = false;
+    if (liveEl) {
+      liveEl.disabled = false;
+      liveEl.classList.remove("is-on");
     }
   }
 
   function start() {
+    if (liveEl && liveEl.disabled) {
+      return;
+    }
     window.clearInterval(poll);
     window.clearInterval(clock);
     generation += 1;
     const gen = generation;
     markTail(0);
-    if (resumeEl) {
-      resumeEl.hidden = true;
+    if (liveEl) {
+      liveEl.disabled = true;
+      liveEl.classList.add("is-on");
     }
     endsAt = Date.now() + LIVE_MS;
     if (stateEl) {
       stateEl.textContent = "Live · 30s";
     }
+    const follow = () => {
+      fetchLogs(200, gen, true).catch(() => {
+        if (gen === generation) {
+          stop("Refresh paused. Press Live to try again.");
+        }
+      });
+    };
+    follow();
     clock = window.setInterval(() => {
       const left = endsAt - Date.now();
       if (left <= 0) {
@@ -106,12 +120,49 @@ if (logEl && logEl.dataset.url) {
         stop("Live ended");
         return;
       }
-      fetchLogs(200, gen, false).catch(() => {
-        if (gen === generation) {
-          stop("Refresh paused. Use Resume to try again.");
-        }
-      });
+      follow();
     }, POLL_MS);
+  }
+
+  function saveText(text, tail) {
+    const safeName = (logEl.dataset.name || "logs").replace(/[^A-Za-z0-9_.-]+/g, "_");
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${safeName}-last-${tail}.txt`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
+  async function downloadTail(tail) {
+    if (downloadChoices) {
+      downloadChoices.hidden = true;
+    }
+    const wasLive = Boolean(liveEl && liveEl.disabled);
+    if (!wasLive && stateEl) {
+      stateEl.textContent = `Downloading ${tail} lines`;
+    }
+    try {
+      const response = await fetch(`${logEl.dataset.url}?tail=${tail}`, {
+        headers: { Accept: "application/json" },
+        redirect: "manual",
+      });
+      if (!response.ok) {
+        throw new Error("download failed");
+      }
+      const data = await response.json();
+      if (typeof data.logs !== "string") {
+        throw new Error("download failed");
+      }
+      saveText(shownText(data.logs), tail);
+      if (!wasLive && stateEl) {
+        stateEl.textContent = `Downloaded last ${tail} lines`;
+      }
+    } catch (err) {
+      if (!wasLive && stateEl) {
+        stateEl.textContent = "Could not download logs.";
+      }
+    }
   }
 
   async function loadSnapshot(tail) {
@@ -127,7 +178,7 @@ if (logEl && logEl.dataset.url) {
         return;
       }
       if (!loaded) {
-        stop("Could not load logs. Use Resume to try again.");
+        stop("Could not load logs.");
         return;
       }
       if (stateEl) {
@@ -135,7 +186,7 @@ if (logEl && logEl.dataset.url) {
       }
     } catch (err) {
       if (gen === generation) {
-        stop("Could not load logs. Use Resume to try again.");
+        stop("Could not load logs.");
       }
     }
   }
@@ -146,22 +197,18 @@ if (logEl && logEl.dataset.url) {
   if (hideEl) {
     hideEl.addEventListener("change", () => applyLogs(rawLogs, false));
   }
-  if (downloadEl) {
+  if (downloadEl && downloadChoices) {
     downloadEl.addEventListener("click", () => {
-      const safeName = (logEl.dataset.name || "logs").replace(/[^A-Za-z0-9_.-]+/g, "_");
-      const blob = new Blob([logEl.textContent], { type: "text/plain;charset=utf-8" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `${safeName}.txt`;
-      link.click();
-      URL.revokeObjectURL(link.href);
+      downloadChoices.hidden = !downloadChoices.hidden;
+    });
+    downloadChoices.querySelectorAll("[data-download]").forEach((button) => {
+      button.addEventListener("click", () => downloadTail(Number(button.dataset.download)));
     });
   }
-  if (resumeEl) {
-    resumeEl.addEventListener("click", start);
+  if (liveEl) {
+    liveEl.addEventListener("click", start);
   }
   applyLogs(rawLogs, false);
-  start();
 }
 
 function escapeHtml(text) {

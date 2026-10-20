@@ -290,6 +290,12 @@ pre.file, #logs {
 
 .log-actions { margin: 0 0 10px; }
 
+#log-download-choices {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .log-tools button {
   background: transparent;
   color: var(--ink);
