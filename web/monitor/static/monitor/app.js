@@ -1,7 +1,7 @@
 const logEl = document.querySelector("#logs");
 const LIVE_MS = 30000;
 const POLL_MS = 3000;
-const HEALTH_LINE = /(?:GET|HEAD)\s+\/(?:healthz?|readyz?|livez?)(?:[/?\s"']|$)/i;
+const HEALTH_LINE = /(?:GET|HEAD)\s+\S*\/(?:healthz?|readyz?|livez?)(?:[/?\s"']|$)/i;
 
 if (logEl && logEl.dataset.url) {
   const emptyEl = document.querySelector("#logs-empty");
