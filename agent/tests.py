@@ -67,6 +67,14 @@ class ApiTests(unittest.TestCase):
         denied = self.client.get("/containers")
         self.assertEqual(denied.status_code, 401)
 
+    def test_log_tail_over_2000_is_rejected(self):
+        response = self.client.get(
+            "/container/logs",
+            params={"name": "demo", "tail": 2001},
+            headers={"X-Agent-Token": "abc"},
+        )
+        self.assertEqual(response.status_code, 422)
+
     def test_invalid_name_never_reaches_docker(self):
         response = self.client.get(
             "/container",

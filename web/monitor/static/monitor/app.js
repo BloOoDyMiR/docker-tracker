@@ -1,42 +1,71 @@
 const logEl = document.querySelector("#logs");
 const LIVE_MS = 30000;
 const POLL_MS = 3000;
+const HEALTH_LINE = /(?:GET|HEAD)\s+\/(?:healthz?|readyz?|livez?)(?:[/?\s"']|$)/i;
 
 if (logEl && logEl.dataset.url) {
   const emptyEl = document.querySelector("#logs-empty");
   const stateEl = document.querySelector("#log-state");
   const resumeEl = document.querySelector("#log-resume");
+  const hideEl = document.querySelector("#log-hide-health");
+  const downloadEl = document.querySelector("#log-download");
   let poll = 0;
   let clock = 0;
   let endsAt = 0;
+  let generation = 0;
+  let rawLogs = logEl.textContent;
 
-  async function tick() {
-    try {
-      const response = await fetch(logEl.dataset.url, {
-        headers: { Accept: "application/json" },
-        redirect: "manual",
-      });
-      if (!response.ok) {
-        return;
-      }
-      const data = await response.json();
-      if (typeof data.logs !== "string" || data.logs === logEl.textContent) {
-        return;
-      }
-      const atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 48;
-      logEl.textContent = data.logs;
-      if (emptyEl) {
-        emptyEl.hidden = data.logs.length > 0;
-      }
+  function shownText(raw) {
+    if (!hideEl || !hideEl.checked) {
+      return raw;
+    }
+    return raw
+      .split("\n")
+      .filter((line) => !HEALTH_LINE.test(line))
+      .join("\n");
+  }
+
+  function applyLogs(raw, jumpToEnd) {
+    rawLogs = raw;
+    const shown = shownText(raw);
+    const atBottom = jumpToEnd || logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 48;
+    if (shown !== logEl.textContent) {
+      logEl.textContent = shown;
       if (atBottom) {
         logEl.scrollTop = logEl.scrollHeight;
       }
-    } catch (err) {
-      stop("Refresh paused. Use Resume to try again.");
+    }
+    if (emptyEl) {
+      emptyEl.hidden = shown.trim().length > 0;
     }
   }
 
+  function markTail(tail) {
+    document.querySelectorAll(".log-actions [data-tail]").forEach((button) => {
+      button.classList.toggle("is-on", Number(button.dataset.tail) === tail);
+    });
+  }
+
+  async function fetchLogs(tail, gen, jumpToEnd) {
+    const response = await fetch(`${logEl.dataset.url}?tail=${tail}`, {
+      headers: { Accept: "application/json" },
+      redirect: "manual",
+    });
+    if (gen !== generation || !response.ok) {
+      return false;
+    }
+    const data = await response.json();
+    if (gen !== generation || typeof data.logs !== "string") {
+      return false;
+    }
+    if (data.logs !== rawLogs) {
+      applyLogs(data.logs, jumpToEnd);
+    }
+    return true;
+  }
+
   function stop(message) {
+    generation += 1;
     window.clearInterval(poll);
     window.clearInterval(clock);
     poll = 0;
@@ -50,6 +79,11 @@ if (logEl && logEl.dataset.url) {
   }
 
   function start() {
+    window.clearInterval(poll);
+    window.clearInterval(clock);
+    generation += 1;
+    const gen = generation;
+    markTail(0);
     if (resumeEl) {
       resumeEl.hidden = true;
     }
@@ -72,13 +106,61 @@ if (logEl && logEl.dataset.url) {
         stop("Live ended");
         return;
       }
-      tick();
+      fetchLogs(200, gen, false).catch(() => {
+        if (gen === generation) {
+          stop("Refresh paused. Use Resume to try again.");
+        }
+      });
     }, POLL_MS);
   }
 
+  async function loadSnapshot(tail) {
+    stop(`Last ${tail} lines`);
+    const gen = generation;
+    markTail(tail);
+    if (stateEl) {
+      stateEl.textContent = `Loading ${tail} lines`;
+    }
+    try {
+      const loaded = await fetchLogs(tail, gen, true);
+      if (gen !== generation) {
+        return;
+      }
+      if (!loaded) {
+        stop("Could not load logs. Use Resume to try again.");
+        return;
+      }
+      if (stateEl) {
+        stateEl.textContent = `Last ${tail} lines`;
+      }
+    } catch (err) {
+      if (gen === generation) {
+        stop("Could not load logs. Use Resume to try again.");
+      }
+    }
+  }
+
+  document.querySelectorAll(".log-actions [data-tail]").forEach((button) => {
+    button.addEventListener("click", () => loadSnapshot(Number(button.dataset.tail)));
+  });
+  if (hideEl) {
+    hideEl.addEventListener("change", () => applyLogs(rawLogs, false));
+  }
+  if (downloadEl) {
+    downloadEl.addEventListener("click", () => {
+      const safeName = (logEl.dataset.name || "logs").replace(/[^A-Za-z0-9_.-]+/g, "_");
+      const blob = new Blob([logEl.textContent], { type: "text/plain;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `${safeName}.txt`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    });
+  }
   if (resumeEl) {
     resumeEl.addEventListener("click", start);
   }
+  applyLogs(rawLogs, false);
   start();
 }
 

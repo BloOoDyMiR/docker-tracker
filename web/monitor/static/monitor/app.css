@@ -283,15 +283,32 @@ pre.file, #logs {
 
 .log-tools {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
+
+.log-actions { margin: 0 0 10px; }
 
 .log-tools button {
   background: transparent;
   color: var(--ink);
   border: 1px solid var(--line);
   padding: 6px 12px;
+}
+
+.log-tools button.is-on {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.log-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
 }
 
 .explain {

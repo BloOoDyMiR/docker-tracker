@@ -128,7 +128,22 @@ class MonitorPageTests(TestCase):
         response = self.client.get(reverse("monitor:container_detail", args=["shop-web"]))
         self.assertContains(response, 'id="explain-panel"')
         self.assertContains(response, "Explain with LLM")
+        self.assertContains(response, "Last 1000")
+        self.assertContains(response, "Last 2000")
+        self.assertContains(response, "Download .txt")
+        self.assertContains(response, "Hide health checks")
         get_logs.assert_called_once()
+
+    @patch("monitor.views.agent_api.get_logs", return_value="line\n")
+    def test_log_tail_only_allows_200_1000_2000(self, get_logs):
+        self.client.force_login(self.owner)
+        ok = self.client.get(reverse("monitor:container_logs", args=["shop-web"]) + "?tail=2000")
+        self.assertEqual(ok.status_code, 200)
+        get_logs.assert_called_once_with("shop-web", tail=2000)
+        get_logs.reset_mock()
+        limited = self.client.get(reverse("monitor:container_logs", args=["shop-web"]) + "?tail=99999")
+        self.assertEqual(limited.status_code, 200)
+        get_logs.assert_called_once_with("shop-web", tail=200)
 
     def test_set_user_containers_replaces_names(self):
         set_user_containers(self.owner, ["shop-web", "shop-web", "api"])

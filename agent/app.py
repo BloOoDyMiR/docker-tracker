@@ -116,7 +116,7 @@ def container_detail(
 @app.get("/container/logs")
 def container_logs(
     name: str = Query(min_length=1, max_length=200),
-    tail: int = Query(default=200, ge=1, le=500),
+    tail: int = Query(default=200, ge=1, le=2000),
     _: None = Depends(require_token),
 ):
     container = container_by_name(name)

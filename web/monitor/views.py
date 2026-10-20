@@ -17,6 +17,7 @@ from .services.agent import AgentError
 from .services.llm import LLMError, LLMNotConfigured, configured, explain_chunks
 
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,200}$")
+LOG_TAILS = {200, 1000, 2000}
 
 
 class PageLoginView(LoginView):
@@ -152,11 +153,19 @@ def container_detail(request, name):
     )
 
 
+def _log_tail(request):
+    try:
+        tail = int(request.GET.get("tail", "200"))
+    except (TypeError, ValueError):
+        return 200
+    return tail if tail in LOG_TAILS else 200
+
+
 @login_required
 def container_logs(request, name):
     _require_allowed(request.user, name)
     try:
-        logs = agent_api.get_logs(name)
+        logs = agent_api.get_logs(name, tail=_log_tail(request))
     except AgentError as exc:
         return JsonResponse({"error": str(exc)}, status=502)
     return JsonResponse({"logs": logs})
