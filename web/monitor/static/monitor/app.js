@@ -211,6 +211,15 @@ if (logEl && logEl.dataset.url) {
   applyLogs(rawLogs, false);
 }
 
+const envShow = document.querySelector("#env-show");
+if (envShow) {
+  envShow.addEventListener("change", () => {
+    document.querySelectorAll(".env-val").forEach((cell) => {
+      cell.textContent = envShow.checked ? cell.dataset.value || "" : cell.dataset.masked || "";
+    });
+  });
+}
+
 function escapeHtml(text) {
   return text
     .replace(/&/g, "&amp;")

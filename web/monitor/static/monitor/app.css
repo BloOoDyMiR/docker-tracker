@@ -448,6 +448,46 @@ button:disabled {
   }
 }
 
+.env-pick, .env-save {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.env-pick label, .env-save {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.env-save { flex: 1 1 100%; }
+
+.env-pick select, .env-save textarea {
+  font: 0.9rem/1.45 var(--mono);
+  color: var(--ink);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.env-save textarea {
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+}
+
+.env-diff { margin-top: 14px; }
+
+.env-diff td, .env-diff th { font-family: var(--mono); }
+
+.env-added td { background: var(--ok-bg); }
+.env-removed td { background: var(--bad-bg); }
+.env-changed td { background: var(--warn-bg); }
+
 @media (max-width: 720px) {
   .top {
     flex-wrap: wrap;

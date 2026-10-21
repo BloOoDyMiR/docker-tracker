@@ -2,10 +2,13 @@ import json
 from unittest.mock import Mock, patch
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from monitor.models import EnvName, NoteEnv, Project, UserContainer, set_user_containers
+from monitor.envfile import diff_env, mask_value, parse_env
+
+from monitor.models import EnvName, EnvRevision, NoteEnv, Project, UserContainer, clean_env_path, set_user_containers
 from monitor.present import tone
 from monitor.services.llm import LLMNotConfigured, explain
 from monitor.services.redact import redact
@@ -104,7 +107,7 @@ class MonitorPageTests(TestCase):
 
     @patch("monitor.views.agent_api.get_logs", return_value="startup failed")
     @patch("monitor.views.agent_api.get_container")
-    @patch("monitor.views.explain_chunks", return_value=iter(["Likely ", "cause."]))
+    @patch("monitor.views.explain_chunks", side_effect=lambda **kwargs: iter(["Likely ", "cause."]))
     @override_settings(LLM_API_TOKEN="", LLM_API_BASE="http://192.168.0.200:8880/v1")
     def test_explain_streams_into_events(self, explain_chunks, get_container, get_logs):
         get_container.return_value = {"container": CONTAINER, "stats": {}}
@@ -134,6 +137,7 @@ class MonitorPageTests(TestCase):
         self.assertContains(response, 'id="log-live"')
         self.assertContains(response, 'data-download="500"')
         self.assertContains(response, "Hide health checks")
+        self.assertContains(response, "no project label")
         get_logs.assert_called_once()
 
     @patch("monitor.views.agent_api.get_logs", return_value="line\n")
@@ -235,3 +239,121 @@ class ExplainTests(TestCase):
         self.assertEqual(body["chat_template_kwargs"], {"enable_thinking": False})
         self.assertIn("Nothing suspicious. The app is up.", body["messages"][0]["content"])
         self.assertNotIn("Authorization", client.stream.call_args.kwargs["headers"])
+
+
+class EnvFileTests(TestCase):
+    def test_parse_ignores_comments_and_quotes(self):
+        parsed = parse_env('# note\nexport TOKEN="sk-live-secret"\nEMPTY=\nBAD-NAME=1\n')
+        self.assertEqual(parsed, {"TOKEN": "sk-live-secret", "EMPTY": ""})
+
+    def test_diff_marks_add_remove_and_change(self):
+        rows = {row["name"]: row["kind"] for row in diff_env({"OLD": "a", "SAME": "1"}, {"NEW": "b", "SAME": "1", "OLD": "z"})}
+        self.assertEqual(rows, {"OLD": "changed", "NEW": "added", "SAME": "same"})
+        self.assertEqual(mask_value("sk-live-zzzzzz"), "sk-…zzzz")
+        self.assertEqual(mask_value("short"), "••••")
+        self.assertEqual(clean_env_path("shop/.env"), "shop/.env")
+        self.assertEqual(clean_env_path(r"shop\.env"), "shop/.env")
+        self.assertEqual(clean_env_path("../secret.env"), "")
+        self.assertEqual(clean_env_path("/etc/passwd"), "")
+
+
+class EnvPageTests(MonitorPageTests):
+    def setUp(self):
+        super().setUp()
+        self.project.env_path = "shop/.env"
+        self.project.save()
+        self.shop = {**CONTAINER, "project": "shop"}
+
+    @patch("monitor.views.agent_api.read_project_env", return_value=("TOKEN=sk-live-zzzzzz\nNEW=1\n", False))
+    @patch("monitor.views.agent_api.get_logs", return_value="")
+    @patch("monitor.views.agent_api.get_container")
+    def test_env_page_shows_project_file(self, get_container, get_logs, read_project_env):
+        get_container.return_value = {
+            "container": self.shop,
+            "stats": {"cpu_percent": 0, "mem_usage_mb": 1, "mem_limit_mb": 2},
+        }
+        EnvRevision.objects.create(
+            project=self.project,
+            container_name="shop-web",
+            body="TOKEN=sk-live-aaaaaa\nGONE=1\n",
+            created_by=self.owner,
+        )
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("monitor:container_detail", args=["shop-web"]))
+        self.assertContains(response, "File now")
+        self.assertContains(response, "shop/.env")
+        self.assertContains(response, "TOKEN=sk-live-zzzzzz")
+        self.assertContains(response, "env-changed")
+        self.assertContains(response, "env-added")
+        self.assertContains(response, "env-removed")
+        self.assertContains(response, "sk-…zzzz")
+        self.assertContains(response, 'data-value="sk-live-zzzzzz"')
+        self.assertContains(response, "ada")
+        self.assertContains(response, "shop-web")
+        read_project_env.assert_called_once_with("shop/.env")
+        get_logs.assert_called()
+
+    @patch("monitor.views.agent_api.read_project_env", return_value=("", True))
+    @patch("monitor.views.agent_api.get_logs", return_value="")
+    @patch("monitor.views.agent_api.get_container")
+    def test_other_project_label_does_not_open_the_file(self, get_container, get_logs, read_project_env):
+        get_container.return_value = {"container": {**CONTAINER, "project": "other"}, "stats": {}}
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("monitor:container_detail", args=["shop-web"]))
+        self.assertContains(response, "No project matches")
+        read_project_env.assert_not_called()
+        get_logs.assert_called()
+
+    @patch("monitor.views.agent_api.read_project_env", return_value=("API_TOKEN=super-secret-value\n", False))
+    @patch("monitor.views.agent_api.write_project_env")
+    @patch("monitor.views.agent_api.get_logs", return_value="")
+    @patch("monitor.views.agent_api.get_container")
+    def test_save_env_copy(self, get_container, get_logs, write_project_env, read_project_env):
+        get_container.return_value = {"container": self.shop, "stats": {}}
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("monitor:env_save", args=["shop-web"]),
+            {"body": "API_TOKEN=super-secret-value\n"},
+            follow=True,
+        )
+        self.assertContains(response, "Saved shop/.env.")
+        saved = EnvRevision.objects.get(container_name="shop-web")
+        self.assertEqual(saved.created_by, self.owner)
+        self.assertEqual(saved.project, self.project)
+        self.assertContains(response, "sup…alue")
+        self.assertContains(response, "ada")
+        self.assertNotContains(response, ">super-secret-value<")
+        write_project_env.assert_called_once_with("shop/.env", "API_TOKEN=super-secret-value\n")
+        get_logs.assert_called()
+
+    def test_project_rejects_parent_path(self):
+        self.project.env_path = "../secret.env"
+        with self.assertRaises(ValidationError):
+            self.project.full_clean()
+
+    def test_other_user_cannot_save_env(self):
+        self.client.force_login(self.other)
+        response = self.client.post(
+            reverse("monitor:env_save", args=["shop-web"]),
+            {"body": "API_TOKEN=super-secret-value\n"},
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(EnvRevision.objects.count(), 0)
+
+    @patch("monitor.views.explain_chunks", return_value=iter(["ok"]))
+    @patch("monitor.views.agent_api.get_container")
+    @patch("monitor.views.agent_api.get_logs", return_value="startup failed")
+    @override_settings(LLM_API_TOKEN="", LLM_API_BASE="http://192.168.0.200:8880/v1")
+    def test_explain_does_not_receive_saved_env_values(self, get_logs, get_container, explain_chunks):
+        get_container.return_value = {"container": CONTAINER, "stats": {}}
+        EnvRevision.objects.create(
+            container_name="shop-web",
+            body="API_TOKEN=super-secret-value\n",
+            created_by=self.owner,
+        )
+        self.client.force_login(self.owner)
+        response = self.client.post(reverse("monitor:explain_submit", args=["shop-web"]))
+        body = b"".join(response.streaming_content).decode()
+        self.assertNotIn("super-secret-value", body)
+        self.assertNotIn("super-secret-value", json.dumps(explain_chunks.call_args.kwargs))
+        get_logs.assert_called_once()

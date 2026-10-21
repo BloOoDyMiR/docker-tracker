@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.models import User
 
-from .models import ContainerNote, EnvName, NoteEnv, Project, set_user_containers
+from .models import ContainerNote, EnvName, EnvRevision, NoteEnv, Project, set_user_containers
 from .services import agent as agent_api
 from .services.agent import AgentError
 
@@ -31,7 +31,7 @@ class ProjectAdmin(admin.ModelAdmin):
     filter_horizontal = ("members",)
     inlines = [EnvNameInline]
     fieldsets = (
-        (None, {"fields": ("name", "slug", "members")}),
+        (None, {"fields": ("name", "slug", "env_path", "members")}),
         ("Dockerfile", {"fields": ("dockerfile",)}),
     )
 
@@ -41,6 +41,16 @@ class EnvNameAdmin(admin.ModelAdmin):
     list_display = ("name", "project", "is_set")
     list_filter = ("is_set", "project")
     search_fields = ("name", "project__name")
+
+
+@admin.register(EnvRevision)
+class EnvRevisionAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "created_by", "project", "container_name")
+    search_fields = ("container_name", "project__name")
+    readonly_fields = ("project", "container_name", "body", "created_by", "created_at")
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(ContainerNote)

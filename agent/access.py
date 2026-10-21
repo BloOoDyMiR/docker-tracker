@@ -1,10 +1,14 @@
 """Pure helpers for the Docker agent. No Docker client imports here."""
 
+import os
 import re
+from pathlib import Path
 
 PROJECT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
 CONTAINER_ID_RE = re.compile(r"^[a-f0-9]{12,64}$")
 CONTAINER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,200}$")
+ENV_PATH_PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
+MAX_ENV_BYTES = 100_000
 
 
 def visible(labels, project):
@@ -13,8 +17,74 @@ def visible(labels, project):
     return labels.get("track.project") == project
 
 
-def summarize(*, container_id, name, image, state):
+def clean_env_path(value):
+    """Relative project file, such as shop/.env. Rejects absolute paths and '..'."""
+    text = (value or "").strip().replace("\\", "/")
+    if not text or text.startswith("/"):
+        return ""
+    parts = text.split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        return ""
+    dirs, name = parts[:-1], parts[-1]
+    if any(not ENV_PATH_PART.fullmatch(part) for part in dirs):
+        return ""
+    if name != ".env" and not (name.endswith(".env") and ENV_PATH_PART.fullmatch(name[: -len(".env")])):
+        return ""
+    return "/".join(parts)
+
+
+def env_file(root, relative):
+    cleaned = clean_env_path(relative)
+    if not root or not cleaned:
+        return None
+    base = Path(root).resolve()
+    target = (base / cleaned).resolve()
+    try:
+        target.relative_to(base)
+    except ValueError:
+        return None
+    return target
+
+
+def read_env_file(root, relative):
+    target = env_file(root, relative)
+    if target is None:
+        raise ValueError("bad path")
+    if target.is_dir():
+        raise ValueError("bad path")
+    if not target.is_file():
+        return "", True
+    data = target.read_bytes()
+    if len(data) > MAX_ENV_BYTES:
+        raise ValueError("too large")
+    return data.decode("utf-8", "replace"), False
+
+
+def write_env_file(root, relative, body):
+    target = env_file(root, relative)
+    if target is None or target.is_dir():
+        raise ValueError("bad path")
+    if not target.parent.is_dir():
+        raise FileNotFoundError(target.parent)
+    raw = body.encode("utf-8")
+    if len(raw) > MAX_ENV_BYTES:
+        raise ValueError("too large")
+    temporary = target.with_name(target.name + ".tmp")
+    temporary.write_bytes(raw)
+    try:
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, target)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def summarize(*, container_id, name, image, state, labels=None):
     state = state or {}
+    labels = labels or {}
+    project = labels.get("track.project") or ""
+    if not PROJECT_RE.fullmatch(project):
+        project = ""
     health_block = state.get("Health") or {}
     health = health_block.get("Status") if health_block else None
     started = _real_time(state.get("StartedAt"))
@@ -31,6 +101,7 @@ def summarize(*, container_id, name, image, state):
         "oom_killed": bool(state.get("OOMKilled")),
         "started_at": started,
         "finished_at": finished,
+        "project": project,
     }
 
 
@@ -59,6 +130,20 @@ def memory_mb(stats):
     except (KeyError, TypeError):
         return None, None
     return round(usage / 1024 / 1024, 1), round(limit / 1024 / 1024, 1)
+
+
+def format_env(items):
+    lines = []
+    for item in items or []:
+        if not isinstance(item, str) or "=" not in item:
+            continue
+        name, value = item.split("=", 1)
+        name = name.strip()
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+            continue
+        lines.append(f"{name}={value}")
+    lines.sort()
+    return "\n".join(lines)
 
 
 def _real_time(value):

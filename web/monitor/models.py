@@ -6,6 +6,23 @@ from django.db import models
 
 SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
 ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+ENV_PATH_PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
+
+
+def clean_env_path(value):
+    """Relative project file, such as shop/.env. Rejects absolute paths and '..'."""
+    text = (value or "").strip().replace("\\", "/")
+    if not text or text.startswith("/"):
+        return ""
+    parts = text.split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        return ""
+    dirs, name = parts[:-1], parts[-1]
+    if any(not ENV_PATH_PART.fullmatch(part) for part in dirs):
+        return ""
+    if name != ".env" and not (name.endswith(".env") and ENV_PATH_PART.fullmatch(name[: -len(".env")])):
+        return ""
+    return "/".join(parts)
 
 
 class Project(models.Model):
@@ -18,6 +35,11 @@ class Project(models.Model):
     dockerfile = models.TextField(
         blank=True,
         help_text="Paste the Dockerfile from git or CI. The portal does not read it from the container.",
+    )
+    env_path = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="File inside the projects folder, such as shop/.env. Not a server login.",
     )
     members = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
@@ -39,6 +61,11 @@ class Project(models.Model):
                     "slug": "Use letters, numbers, hyphens, and underscores. Start with a letter or number."
                 }
             )
+        if self.env_path:
+            cleaned = clean_env_path(self.env_path)
+            if not cleaned:
+                raise ValidationError({"env_path": "Use a relative path such as shop/.env."})
+            self.env_path = cleaned
 
 
 class EnvName(models.Model):
@@ -101,6 +128,32 @@ class ContainerNote(models.Model):
 
     def __str__(self):
         return self.container_name
+
+
+class EnvRevision(models.Model):
+    project = models.ForeignKey(
+        Project,
+        null=True,
+        blank=True,
+        related_name="env_revisions",
+        on_delete=models.SET_NULL,
+    )
+    container_name = models.CharField(max_length=255)
+    body = models.TextField(help_text="The .env file after this save. Explain does not receive it.")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="env_revisions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.container_name} @ {self.created_at:%Y-%m-%d %H:%M}"
 
 
 class NoteEnv(models.Model):

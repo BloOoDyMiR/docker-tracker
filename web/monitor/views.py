@@ -1,15 +1,19 @@
 import json
 import re
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
 from django.contrib.messages import get_messages
 from django.db import close_old_connections
 from django.http import Http404, JsonResponse, StreamingHttpResponse
 from django.middleware.csrf import get_token
+from django.shortcuts import redirect
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import ContainerNote
+from .envfile import MAX_ENV_CHARS, MAX_REVISIONS, diff_env, parse_env
+from .models import SLUG_RE, ContainerNote, EnvRevision, Project
 from .present import present_container
 from .rendering import render_page
 from .services import agent as agent_api
@@ -101,6 +105,10 @@ def _empty_detail(request, name, error):
             "note": _note(name),
             "error": error,
             "llm_configured": configured(),
+            "env_revisions": [],
+            "env_rows": [],
+            "env_old_id": None,
+            "env_new_id": None,
         },
     )
 
@@ -149,8 +157,143 @@ def container_detail(request, name):
             "note": _note(name),
             "error": None,
             "llm_configured": configured(),
+            **_env_context(request, container),
         },
     )
+
+
+def _project_for(container):
+    slug = (container or {}).get("project") or ""
+    if not SLUG_RE.fullmatch(slug):
+        return None
+    return Project.objects.filter(slug=slug).first()
+
+
+def _revision_label(revision):
+    local = timezone.localtime(revision.created_at)
+    author = revision.created_by.get_username() if revision.created_by_id else "unknown"
+    return {
+        "id": revision.id,
+        "label": f"{local:%Y-%m-%d %H:%M} · {author} · {revision.container_name}",
+        "when": f"{local:%Y-%m-%d %H:%M}",
+        "who": author,
+        "container": revision.container_name,
+    }
+
+
+def _chosen_id(raw, allowed):
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value in allowed else None
+
+
+def _env_context(request, container):
+    slug = (container or {}).get("project") or ""
+    project = Project.objects.filter(slug=slug).first() if SLUG_RE.fullmatch(slug) else None
+    revisions = []
+    if project is not None:
+        revisions = list(
+            EnvRevision.objects.filter(project=project).select_related("created_by")[:MAX_REVISIONS]
+        )
+    file_text = ""
+    missing = False
+    env_error = None
+    editable = bool(project and project.env_path)
+    if not slug:
+        env_error = "This container has no project label, so there is no .env file to open."
+        editable = False
+    elif project is None:
+        env_error = "No project matches this container's label."
+        editable = False
+    elif not project.env_path:
+        env_error = "No .env path is set for this project."
+        editable = False
+    else:
+        try:
+            file_text, missing = agent_api.read_project_env(project.env_path)
+        except AgentError as exc:
+            env_error = str(exc)
+            editable = False
+    by_id = {revision.id: revision for revision in revisions}
+    new_raw = request.GET.get("new")
+    new_id = _chosen_id(new_raw, by_id)
+    if editable and (new_raw == "file" or (new_id is None and new_raw in (None, ""))):
+        new_id = "file"
+    elif new_id is None:
+        new_id = "file" if editable else None
+    old_id = _chosen_id(request.GET.get("old"), by_id)
+    if old_id is None and "old" not in request.GET and revisions and new_id == "file":
+        old_id = revisions[0].id
+    if old_id == new_id:
+        old_id = None
+    old_body = by_id[old_id].body if old_id in by_id else ""
+    if new_id == "file":
+        new_body = file_text
+    elif new_id in by_id:
+        new_body = by_id[new_id].body
+    else:
+        new_body = ""
+    rows = diff_env(parse_env(old_body), parse_env(new_body)) if editable else []
+    labels = [_revision_label(revision) for revision in revisions]
+    return {
+        "env_project": project,
+        "env_error": env_error,
+        "env_missing": missing,
+        "env_editable": editable,
+        "env_revisions": labels,
+        "env_old_id": old_id,
+        "env_new_id": new_id,
+        "env_rows": rows,
+        "live_env": file_text if editable else "",
+    }
+
+
+@login_required
+@require_POST
+def env_save(request, name):
+    _require_allowed(request.user, name)
+    try:
+        payload = agent_api.get_container(name)
+    except AgentError as exc:
+        messages.error(request, str(exc))
+        return redirect("monitor:container_detail", name=name)
+    container = payload.get("container") if isinstance(payload, dict) else None
+    project = _project_for(container if isinstance(container, dict) else None)
+    if project is None or not project.env_path:
+        messages.error(request, "This container has no .env file configured.")
+        return redirect("monitor:container_detail", name=name)
+    body = request.POST.get("body", "")
+    if len(body) > MAX_ENV_CHARS:
+        messages.error(request, "That env file is too large.")
+        return redirect("monitor:container_detail", name=name)
+    if not parse_env(body):
+        messages.error(request, "Paste at least one NAME=value line.")
+        return redirect("monitor:container_detail", name=name)
+    try:
+        agent_api.write_project_env(project.env_path, body)
+    except AgentError as exc:
+        messages.error(request, str(exc))
+        return redirect("monitor:container_detail", name=name)
+    EnvRevision.objects.create(
+        project=project,
+        container_name=name,
+        body=body,
+        created_by=request.user,
+    )
+    stale = list(
+        EnvRevision.objects.filter(project=project)
+        .order_by("-created_at", "-id")
+        .values_list("id", flat=True)[MAX_REVISIONS:]
+    )
+    if stale:
+        EnvRevision.objects.filter(id__in=stale).delete()
+    messages.success(
+        request,
+        f"Saved {project.env_path}. Recreate the container when you want this file to take effect.",
+    )
+    return redirect("monitor:container_detail", name=name)
 
 
 def _log_tail(request):

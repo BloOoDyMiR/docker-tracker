@@ -1,7 +1,8 @@
-"""Read-only Docker API for the Django portal.
+"""Docker API and project .env files for the Django portal.
 
 Django calls this over the private network with AGENT_TOKEN. The browser never
-talks to this process, and this process never runs docker exec.
+talks to this process, and this process never runs docker exec. Project files
+are read and written only inside PROJECTS_ROOT.
 """
 
 import os
@@ -10,11 +11,21 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from pydantic import BaseModel
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 from fastapi.responses import JSONResponse
 
-from access import CONTAINER_NAME_RE, cpu_percent, memory_mb, summarize
+from access import (
+    CONTAINER_NAME_RE,
+    MAX_ENV_BYTES,
+    cpu_percent,
+    format_env,
+    memory_mb,
+    read_env_file,
+    summarize,
+    write_env_file,
+)
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -68,6 +79,7 @@ def row_for(container):
         name=container.name,
         image=image_of(container),
         state=container.attrs.get("State") or {},
+        labels=container.labels or {},
     )
 
 
@@ -111,6 +123,57 @@ def container_detail(
 ):
     container = container_by_name(name)
     return {"container": row_for(container), "stats": read_stats(container)}
+
+
+@app.get("/container/env")
+def container_env(
+    name: str = Query(min_length=1, max_length=200),
+    _: None = Depends(require_token),
+):
+    container = container_by_name(name)
+    raw = (container.attrs.get("Config") or {}).get("Env") or []
+    return {"env": format_env(raw)}
+
+
+class EnvBody(BaseModel):
+    path: str
+    body: str
+
+
+def projects_root():
+    root = os.environ.get("PROJECTS_ROOT", "")
+    if not root:
+        raise HTTPException(status_code=503, detail="The projects folder is not mounted.")
+    return root
+
+
+@app.get("/project/env")
+def project_env(
+    path: str = Query(min_length=1, max_length=200),
+    _: None = Depends(require_token),
+):
+    try:
+        text, missing = read_env_file(projects_root(), path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="That path is not allowed.") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=403, detail="The agent cannot read that file.") from exc
+    return {"env": text, "missing": missing}
+
+
+@app.put("/project/env")
+def save_project_env(payload: EnvBody, _: None = Depends(require_token)):
+    if len(payload.body) > MAX_ENV_BYTES:
+        raise HTTPException(status_code=400, detail="That env file is too large.")
+    try:
+        write_env_file(projects_root(), payload.path, payload.body)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="That project folder is not in the projects directory.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="That path is not allowed.") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=403, detail="The agent cannot write that file.") from exc
+    return {"ok": True}
 
 
 @app.get("/container/logs")

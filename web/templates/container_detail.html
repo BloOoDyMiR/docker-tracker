@@ -41,6 +41,78 @@
   </section>
   {% endif %}
 
+  <section>
+    <div class="title-row">
+      <h2>Env</h2>
+      {% if env_rows %}
+        <label class="log-check"><input type="checkbox" id="env-show"> Show values</label>
+      {% endif %}
+    </div>
+    {% if env_project and env_project.env_path %}
+      <p class="hint">This is {{ env_project.env_path }} for {{ env_project.name }}. Saving writes that file. The running container keeps its current environment until you recreate it. Explain does not receive the values.</p>
+    {% endif %}
+    {% if env_error %}
+      <p class="error">{{ env_error }}</p>
+    {% endif %}
+    {% if env_missing %}
+      <p class="hint">This file is not there yet. Saving creates it.</p>
+    {% endif %}
+    {% if env_revisions %}
+      <table>
+        <thead><tr><th>When</th><th>Who</th><th>Container</th></tr></thead>
+        <tbody>
+          {% for rev in env_revisions %}
+            <tr>
+              <td>{{ rev.when }}</td>
+              <td>{{ rev.who }}</td>
+              <td>{{ rev.container }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+    {% if env_editable %}
+      {% if env_revisions or live_env %}
+        <form method="get" class="env-pick" action="{{ url('monitor:container_detail', container.name) }}">
+          <label>Previous
+            <select name="old">
+              <option value="" {% if not env_old_id %}selected{% endif %}>None</option>
+              {% for rev in env_revisions %}
+                <option value="{{ rev.id }}" {% if rev.id == env_old_id %}selected{% endif %}>{{ rev.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Current
+            <select name="new">
+              <option value="file" {% if env_new_id == "file" %}selected{% endif %}>File now</option>
+              {% for rev in env_revisions %}
+                <option value="{{ rev.id }}" {% if rev.id == env_new_id %}selected{% endif %}>{{ rev.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button type="submit">Compare</button>
+        </form>
+        <table class="env-diff">
+          <thead><tr><th>Name</th><th>Previous</th><th>Current</th></tr></thead>
+          <tbody>
+            {% for row in env_rows %}
+              <tr class="env-{{ row.kind }}">
+                <td><code>{{ row.name }}</code></td>
+                <td class="env-val" data-masked="{{ row.old_masked }}" data-value="{{ row.old_value }}">{{ row.old_masked }}</td>
+                <td class="env-val" data-masked="{{ row.new_masked }}" data-value="{{ row.new_value }}">{{ row.new_masked }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+      <form method="post" action="{{ url('monitor:env_save', container.name) }}" class="env-save">
+        <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+        <textarea name="body" rows="12" spellcheck="false" placeholder="DATABASE_URL=postgres://…">{{ live_env }}</textarea>
+        <button type="submit">Save env</button>
+      </form>
+    {% endif %}
+  </section>
+
   {% if note and note.dockerfile %}
   <section>
     <h2>Dockerfile</h2>

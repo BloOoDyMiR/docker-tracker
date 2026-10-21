@@ -1,7 +1,18 @@
 import os
+import tempfile
 import unittest
+from pathlib import Path
 
-from access import cpu_percent, memory_mb, summarize, visible
+from access import (
+    clean_env_path,
+    cpu_percent,
+    format_env,
+    memory_mb,
+    read_env_file,
+    summarize,
+    visible,
+    write_env_file,
+)
 
 
 class AccessTests(unittest.TestCase):
@@ -31,6 +42,33 @@ class AccessTests(unittest.TestCase):
         self.assertIsNone(row["finished_at"])
         self.assertEqual(row["health"], "healthy")
         self.assertEqual(row["restart_count"], 2)
+        self.assertEqual(row["project"], "")
+
+    def test_summarize_keeps_project_label(self):
+        row = summarize(
+            container_id="a" * 64,
+            name="shop-web",
+            image="shop",
+            state={"Status": "running"},
+            labels={"track.project": "shop"},
+        )
+        self.assertEqual(row["project"], "shop")
+
+    def test_env_path_stays_inside_the_projects_folder(self):
+        self.assertEqual(clean_env_path("shop/.env"), "shop/.env")
+        self.assertEqual(clean_env_path("../secret.env"), "")
+        self.assertEqual(clean_env_path("/etc/passwd"), "")
+        with tempfile.TemporaryDirectory() as tmp:
+            shop = Path(tmp) / "shop"
+            shop.mkdir()
+            write_env_file(tmp, "shop/.env", "TOKEN=sk-live-zzzzzz\n")
+            text, missing = read_env_file(tmp, "shop/.env")
+            self.assertFalse(missing)
+            self.assertEqual(text, "TOKEN=sk-live-zzzzzz\n")
+            with self.assertRaises(ValueError):
+                read_env_file(tmp, "../.env")
+            with self.assertRaises(FileNotFoundError):
+                write_env_file(tmp, "missing/.env", "A=1\n")
 
     def test_cpu_percent(self):
         stats = {
@@ -45,6 +83,10 @@ class AccessTests(unittest.TestCase):
             },
         }
         self.assertEqual(cpu_percent(stats), 40.0)
+
+    def test_format_env_sorts_names_and_drops_blank(self):
+        text = format_env(["PATH=/usr/bin", "TOKEN=sk-live-zzzzzz", "bad name=1", "", None])
+        self.assertEqual(text, "PATH=/usr/bin\nTOKEN=sk-live-zzzzzz")
 
     def test_memory_mb(self):
         usage, limit = memory_mb({"memory_stats": {"usage": 1024 * 1024, "limit": 2 * 1024 * 1024}})
@@ -82,3 +124,25 @@ class ApiTests(unittest.TestCase):
             headers={"X-Agent-Token": "abc"},
         )
         self.assertEqual(response.status_code, 404)
+
+    def test_project_env_requires_token_and_rejects_escape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["PROJECTS_ROOT"] = tmp
+            (Path(tmp) / "shop").mkdir()
+            (Path(tmp) / "shop" / ".env").write_bytes(b"TOKEN=secret\n")
+            denied = self.client.get("/project/env", params={"path": "shop/.env"})
+            self.assertEqual(denied.status_code, 401)
+            ok = self.client.get(
+                "/project/env",
+                params={"path": "shop/.env"},
+                headers={"X-Agent-Token": "abc"},
+            )
+            self.assertEqual(ok.status_code, 200)
+            self.assertEqual(ok.json()["env"], "TOKEN=secret\n")
+            self.assertFalse(ok.json()["missing"])
+            escaped = self.client.get(
+                "/project/env",
+                params={"path": "../secret.env"},
+                headers={"X-Agent-Token": "abc"},
+            )
+            self.assertEqual(escaped.status_code, 400)
