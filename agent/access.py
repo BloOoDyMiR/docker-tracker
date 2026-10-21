@@ -7,7 +7,8 @@ from pathlib import Path
 PROJECT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
 CONTAINER_ID_RE = re.compile(r"^[a-f0-9]{12,64}$")
 CONTAINER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,200}$")
-ENV_PATH_PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
+ENV_PATH_PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,120}$")
+COMPOSE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
 MAX_ENV_BYTES = 100_000
 
 
@@ -31,6 +32,21 @@ def clean_env_path(value):
     if name != ".env" and not (name.endswith(".env") and ENV_PATH_PART.fullmatch(name[: -len(".env")])):
         return ""
     return "/".join(parts)
+
+
+def compose_env_path(working_dir, host_root):
+    """`.env` inside a Compose project folder, relative to the projects directory."""
+    working = (working_dir or "").replace("\\", "/").rstrip("/")
+    root = (host_root or "").replace("\\", "/").rstrip("/")
+    if not working or not root:
+        return ""
+    if working == root:
+        relative = ".env"
+    elif working.startswith(root + "/"):
+        relative = working[len(root) + 1 :] + "/.env"
+    else:
+        return ""
+    return clean_env_path(relative)
 
 
 def env_file(root, relative):
@@ -79,12 +95,21 @@ def write_env_file(root, relative, body):
         raise
 
 
-def summarize(*, container_id, name, image, state, labels=None):
+def summarize(*, container_id, name, image, state, labels=None, host_projects_dir=""):
     state = state or {}
     labels = labels or {}
     project = labels.get("track.project") or ""
     if not PROJECT_RE.fullmatch(project):
         project = ""
+    compose_project = labels.get("com.docker.compose.project") or ""
+    if not COMPOSE_NAME_RE.fullmatch(compose_project):
+        compose_project = ""
+    env_path = ""
+    if compose_project:
+        env_path = compose_env_path(
+            labels.get("com.docker.compose.project.working_dir") or "",
+            host_projects_dir,
+        )
     health_block = state.get("Health") or {}
     health = health_block.get("Status") if health_block else None
     started = _real_time(state.get("StartedAt"))
@@ -102,6 +127,8 @@ def summarize(*, container_id, name, image, state, labels=None):
         "started_at": started,
         "finished_at": finished,
         "project": project,
+        "compose_project": compose_project,
+        "env_path": env_path,
     }
 
 

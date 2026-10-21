@@ -4,6 +4,7 @@ services:
     environment:
       AGENT_TOKEN: ${AGENT_TOKEN}
       PROJECTS_ROOT: /projects
+      HOST_PROJECTS_DIR: ${PROJECTS_DIR:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_DIR:-./projects}:/projects

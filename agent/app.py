@@ -80,6 +80,7 @@ def row_for(container):
         image=image_of(container),
         state=container.attrs.get("State") or {},
         labels=container.labels or {},
+        host_projects_dir=os.environ.get("HOST_PROJECTS_DIR", ""),
     )
 
 

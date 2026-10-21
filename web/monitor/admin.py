@@ -45,9 +45,9 @@ class EnvNameAdmin(admin.ModelAdmin):
 
 @admin.register(EnvRevision)
 class EnvRevisionAdmin(admin.ModelAdmin):
-    list_display = ("created_at", "created_by", "project", "container_name")
-    search_fields = ("container_name", "project__name")
-    readonly_fields = ("project", "container_name", "body", "created_by", "created_at")
+    list_display = ("created_at", "created_by", "compose_project", "container_name", "env_path")
+    search_fields = ("container_name", "compose_project", "env_path", "project__name")
+    readonly_fields = ("project", "compose_project", "env_path", "container_name", "body", "created_by", "created_at")
 
     def has_add_permission(self, request):
         return False

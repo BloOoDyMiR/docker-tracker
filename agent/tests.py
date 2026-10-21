@@ -5,6 +5,7 @@ from pathlib import Path
 
 from access import (
     clean_env_path,
+    compose_env_path,
     cpu_percent,
     format_env,
     memory_mb,
@@ -43,6 +44,8 @@ class AccessTests(unittest.TestCase):
         self.assertEqual(row["health"], "healthy")
         self.assertEqual(row["restart_count"], 2)
         self.assertEqual(row["project"], "")
+        self.assertEqual(row["compose_project"], "")
+        self.assertEqual(row["env_path"], "")
 
     def test_summarize_keeps_project_label(self):
         row = summarize(
@@ -50,14 +53,27 @@ class AccessTests(unittest.TestCase):
             name="shop-web",
             image="shop",
             state={"Status": "running"},
-            labels={"track.project": "shop"},
+            labels={
+                "track.project": "shop",
+                "com.docker.compose.project": "voip",
+                "com.docker.compose.project.working_dir": "/home/mj/Projects/VOIP",
+            },
+            host_projects_dir="/home/mj/Projects",
         )
         self.assertEqual(row["project"], "shop")
+        self.assertEqual(row["compose_project"], "voip")
+        self.assertEqual(row["env_path"], "VOIP/.env")
 
     def test_env_path_stays_inside_the_projects_folder(self):
         self.assertEqual(clean_env_path("shop/.env"), "shop/.env")
         self.assertEqual(clean_env_path("../secret.env"), "")
         self.assertEqual(clean_env_path("/etc/passwd"), "")
+        self.assertEqual(clean_env_path("Mongo 7 config/.env"), "Mongo 7 config/.env")
+        root = "/home/mj/Projects"
+        self.assertEqual(compose_env_path(root + "/VOIP", root), "VOIP/.env")
+        self.assertEqual(compose_env_path(root + "/Mongo 7 config", root), "Mongo 7 config/.env")
+        self.assertEqual(compose_env_path("/etc/VOIP", root), "")
+        self.assertEqual(compose_env_path(root + "-evil/x", root), "")
         with tempfile.TemporaryDirectory() as tmp:
             shop = Path(tmp) / "shop"
             shop.mkdir()

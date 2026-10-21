@@ -48,8 +48,8 @@
         <label class="log-check"><input type="checkbox" id="env-show"> Show values</label>
       {% endif %}
     </div>
-    {% if env_project and env_project.env_path %}
-      <p class="hint">This is {{ env_project.env_path }} for {{ env_project.name }}. Saving writes that file. The running container keeps its current environment until you recreate it. Explain does not receive the values.</p>
+    {% if env_path %}
+      <p class="hint">This is {{ env_path }}{% if env_compose %}, shared by every service in {{ env_compose }}{% elif env_project %} for {{ env_project.name }}{% endif %}. Saving writes that file. Recreate the stack when you want the new values to take effect. Explain does not receive the values.</p>
     {% endif %}
     {% if env_error %}
       <p class="error">{{ env_error }}</p>

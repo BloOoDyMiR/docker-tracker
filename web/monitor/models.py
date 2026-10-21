@@ -6,7 +6,7 @@ from django.db import models
 
 SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
 ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-ENV_PATH_PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
+ENV_PATH_PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,120}$")
 
 
 def clean_env_path(value):
@@ -139,6 +139,8 @@ class EnvRevision(models.Model):
         on_delete=models.SET_NULL,
     )
     container_name = models.CharField(max_length=255)
+    env_path = models.CharField(max_length=200, blank=True)
+    compose_project = models.CharField(max_length=80, blank=True)
     body = models.TextField(help_text="The .env file after this save. Explain does not receive it.")
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

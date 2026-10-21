@@ -126,10 +126,25 @@ def dashboard(request):
         "dashboard.html",
         {
             "containers": containers,
+            "groups": _groups(containers),
             "agent_error": agent_error,
             "sees_all": request.user.is_superuser,
         },
     )
+
+
+def _groups(containers):
+    buckets = {}
+    for container in containers:
+        name = container.get("compose_project") or ""
+        buckets.setdefault(name, []).append(container)
+    groups = [
+        {"name": name, "containers": buckets[name]}
+        for name in sorted((key for key in buckets if key), key=str.lower)
+    ]
+    if "" in buckets:
+        groups.append({"name": "Other", "containers": buckets[""]})
+    return groups
 
 
 @login_required
@@ -189,30 +204,56 @@ def _chosen_id(raw, allowed):
     return value if value in allowed else None
 
 
+def _file_target(container):
+    container = container or {}
+    compose = container.get("compose_project") or ""
+    env_path = container.get("env_path") or ""
+    project = _project_for(container)
+    if compose and env_path:
+        return {"path": env_path, "compose": compose, "project": None}
+    if compose and not env_path:
+        return {"path": "", "compose": compose, "project": None, "outside": True}
+    if project is not None and project.env_path:
+        return {"path": project.env_path, "compose": "", "project": project}
+    slug = container.get("project") or ""
+    return {"path": "", "compose": "", "project": project, "slug": slug}
+
+
+def _revisions_for(target):
+    if target.get("path") and target.get("compose"):
+        found = EnvRevision.objects.filter(env_path=target["path"])
+    elif target.get("project") is not None:
+        found = EnvRevision.objects.filter(project=target["project"])
+    else:
+        return []
+    return list(found.select_related("created_by")[:MAX_REVISIONS])
+
+
 def _env_context(request, container):
-    slug = (container or {}).get("project") or ""
-    project = Project.objects.filter(slug=slug).first() if SLUG_RE.fullmatch(slug) else None
-    revisions = []
-    if project is not None:
-        revisions = list(
-            EnvRevision.objects.filter(project=project).select_related("created_by")[:MAX_REVISIONS]
-        )
+    target = _file_target(container)
+    project = target.get("project")
+    revisions = _revisions_for(target)
     file_text = ""
     missing = False
     env_error = None
-    editable = bool(project and project.env_path)
-    if not slug:
+    editable = bool(target.get("path"))
+    if target.get("outside"):
+        env_error = "This stack's folder is outside the projects directory, so its .env cannot be opened."
+        editable = False
+    elif target.get("compose") and target.get("path"):
+        pass
+    elif not (container or {}).get("project") and not target.get("compose"):
         env_error = "This container has no project label, so there is no .env file to open."
         editable = False
-    elif project is None:
+    elif project is None and not target.get("path"):
         env_error = "No project matches this container's label."
         editable = False
-    elif not project.env_path:
+    elif not target.get("path"):
         env_error = "No .env path is set for this project."
         editable = False
-    else:
+    if editable:
         try:
-            file_text, missing = agent_api.read_project_env(project.env_path)
+            file_text, missing = agent_api.read_project_env(target["path"])
         except AgentError as exc:
             env_error = str(exc)
             editable = False
@@ -239,6 +280,8 @@ def _env_context(request, container):
     labels = [_revision_label(revision) for revision in revisions]
     return {
         "env_project": project,
+        "env_compose": target.get("compose") or "",
+        "env_path": target.get("path") or "",
         "env_error": env_error,
         "env_missing": missing,
         "env_editable": editable,
@@ -260,8 +303,8 @@ def env_save(request, name):
         messages.error(request, str(exc))
         return redirect("monitor:container_detail", name=name)
     container = payload.get("container") if isinstance(payload, dict) else None
-    project = _project_for(container if isinstance(container, dict) else None)
-    if project is None or not project.env_path:
+    target = _file_target(container if isinstance(container, dict) else None)
+    if not target.get("path"):
         messages.error(request, "This container has no .env file configured.")
         return redirect("monitor:container_detail", name=name)
     body = request.POST.get("body", "")
@@ -272,26 +315,29 @@ def env_save(request, name):
         messages.error(request, "Paste at least one NAME=value line.")
         return redirect("monitor:container_detail", name=name)
     try:
-        agent_api.write_project_env(project.env_path, body)
+        agent_api.write_project_env(target["path"], body)
     except AgentError as exc:
         messages.error(request, str(exc))
         return redirect("monitor:container_detail", name=name)
     EnvRevision.objects.create(
-        project=project,
+        project=target.get("project"),
+        env_path=target["path"],
+        compose_project=target.get("compose") or "",
         container_name=name,
         body=body,
         created_by=request.user,
     )
-    stale = list(
-        EnvRevision.objects.filter(project=project)
-        .order_by("-created_at", "-id")
-        .values_list("id", flat=True)[MAX_REVISIONS:]
+    scope = (
+        EnvRevision.objects.filter(env_path=target["path"])
+        if target.get("compose")
+        else EnvRevision.objects.filter(project=target.get("project"))
     )
+    stale = list(scope.order_by("-created_at", "-id").values_list("id", flat=True)[MAX_REVISIONS:])
     if stale:
         EnvRevision.objects.filter(id__in=stale).delete()
     messages.success(
         request,
-        f"Saved {project.env_path}. Recreate the container when you want this file to take effect.",
+        f"Saved {target['path']}. Recreate the stack when you want this file to take effect.",
     )
     return redirect("monitor:container_detail", name=name)
 

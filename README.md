@@ -53,6 +53,6 @@ An empty token is sent without an `Authorization` header. The request also sets 
 
 Create a user and tick Containers this user can see. The list is every container the agent can see. Superusers are not limited by those ticks.
 
-On a project, set Env path to a file inside `PROJECTS_DIR`, such as `shop/.env`. The container needs the label `track.project=shop`. Opening that container shows the file. Save writes it and records who saved it, when, and from which container. Recreate the container when the new values should take effect. Explain still receives names only, never the file.
+Containers from one Compose stack are grouped on the home page. Opening any service loads the `.env` beside that stack's compose file, when the stack folder is inside `PROJECTS_DIR`. Saving writes that shared file and records who saved it, when, and from which container. Recreate the stack when the new values should take effect. Explain still receives names only, never the file.
 
 Optional container notes store a Dockerfile and env names (set or missing, never the value) for the Explain action.

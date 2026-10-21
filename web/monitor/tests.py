@@ -97,6 +97,21 @@ class MonitorPageTests(TestCase):
         self.assertContains(response, "shop-web")
         self.assertContains(response, "other-web")
 
+    @patch("monitor.views.agent_api.list_containers")
+    def test_dashboard_groups_services_from_one_compose_stack(self, list_containers):
+        list_containers.return_value = [
+            {**CONTAINER, "name": "voip-api-1", "compose_project": "voip"},
+            {**OTHER, "name": "track-demo"},
+            {**CONTAINER, "id": "c" * 64, "short_id": "c" * 12, "name": "voip-web-1", "compose_project": "voip"},
+        ]
+        root = User.objects.create_superuser("root", "root@example.com", "secret-pass-123")
+        self.client.force_login(root)
+        response = self.client.get(reverse("monitor:dashboard"))
+        body = response.content.decode()
+        self.assertLess(body.index('class="stack-name">voip'), body.index('class="stack-name">Other'))
+        self.assertLess(body.index("voip-web-1"), body.index('class="stack-name">Other'))
+        self.assertLess(body.index('class="stack-name">Other'), body.index("track-demo"))
+
     def test_explain_without_local_model_shows_setup(self):
         self.client.force_login(self.owner)
         response = self.client.post(reverse("monitor:explain_submit", args=["shop-web"]))
@@ -255,6 +270,7 @@ class EnvFileTests(TestCase):
         self.assertEqual(clean_env_path(r"shop\.env"), "shop/.env")
         self.assertEqual(clean_env_path("../secret.env"), "")
         self.assertEqual(clean_env_path("/etc/passwd"), "")
+        self.assertEqual(clean_env_path("Mongo 7 config/.env"), "Mongo 7 config/.env")
 
 
 class EnvPageTests(MonitorPageTests):
@@ -293,6 +309,22 @@ class EnvPageTests(MonitorPageTests):
         read_project_env.assert_called_once_with("shop/.env")
         get_logs.assert_called()
 
+    @patch("monitor.views.agent_api.read_project_env", return_value=("TOKEN=sk-live-zzzzzz\n", False))
+    @patch("monitor.views.agent_api.get_logs", return_value="")
+    @patch("monitor.views.agent_api.get_container")
+    def test_compose_service_opens_the_stack_env(self, get_container, get_logs, read_project_env):
+        get_container.return_value = {
+            "container": {**CONTAINER, "compose_project": "voip", "env_path": "VOIP/.env"},
+            "stats": {"cpu_percent": 0, "mem_usage_mb": 1, "mem_limit_mb": 2},
+        }
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("monitor:container_detail", args=["shop-web"]))
+        self.assertContains(response, "VOIP/.env")
+        self.assertContains(response, "shared by every service in voip")
+        self.assertContains(response, "TOKEN=sk-live-zzzzzz")
+        read_project_env.assert_called_once_with("VOIP/.env")
+        get_logs.assert_called()
+
     @patch("monitor.views.agent_api.read_project_env", return_value=("", True))
     @patch("monitor.views.agent_api.get_logs", return_value="")
     @patch("monitor.views.agent_api.get_container")
@@ -324,6 +356,31 @@ class EnvPageTests(MonitorPageTests):
         self.assertContains(response, "ada")
         self.assertNotContains(response, ">super-secret-value<")
         write_project_env.assert_called_once_with("shop/.env", "API_TOKEN=super-secret-value\n")
+        get_logs.assert_called()
+
+    @patch("monitor.views.agent_api.read_project_env", return_value=("API_TOKEN=super-secret-value\n", False))
+    @patch("monitor.views.agent_api.write_project_env")
+    @patch("monitor.views.agent_api.get_logs", return_value="")
+    @patch("monitor.views.agent_api.get_container")
+    def test_save_compose_env_records_the_service(self, get_container, get_logs, write_project_env, read_project_env):
+        get_container.return_value = {
+            "container": {**CONTAINER, "name": "shop-web", "compose_project": "voip", "env_path": "VOIP/.env"},
+            "stats": {},
+        }
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("monitor:env_save", args=["shop-web"]),
+            {"body": "API_TOKEN=super-secret-value\n"},
+            follow=True,
+        )
+        self.assertContains(response, "Saved VOIP/.env.")
+        saved = EnvRevision.objects.get()
+        self.assertEqual(saved.created_by, self.owner)
+        self.assertEqual(saved.compose_project, "voip")
+        self.assertEqual(saved.container_name, "shop-web")
+        self.assertEqual(saved.env_path, "VOIP/.env")
+        self.assertIsNone(saved.project)
+        write_project_env.assert_called_once_with("VOIP/.env", "API_TOKEN=super-secret-value\n")
         get_logs.assert_called()
 
     def test_project_rejects_parent_path(self):

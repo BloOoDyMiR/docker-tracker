@@ -157,11 +157,17 @@ button:hover { background: #27272a; }
   gap: 16px;
 }
 
+.stack { margin-top: 28px; }
+.stack-name {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+}
 .board {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   gap: 14px;
-  margin-top: 22px;
+  margin-top: 12px;
 }
 
 .widget {
