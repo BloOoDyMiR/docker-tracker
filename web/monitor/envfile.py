@@ -36,19 +36,24 @@ def mask_value(value):
 
 
 def side_lines(file_text, draft_text):
-    """Color the file lines missing from the draft, and draft lines that are new."""
+    """Mark the file line red and the edited line green when that row differs."""
     file_lines = (file_text or "").splitlines()
     draft_lines = (draft_text or "").splitlines()
-    file_set = set(file_lines)
-    draft_set = set(draft_lines)
-    left = [
-        {"kind": "same" if line in draft_set else "removed", "text": line}
-        for line in file_lines
-    ]
-    right = [
-        {"kind": "same" if line in file_set else "added", "text": line}
-        for line in draft_lines
-    ]
+    left = []
+    right = []
+    for index in range(max(len(file_lines), len(draft_lines))):
+        old = file_lines[index] if index < len(file_lines) else None
+        new = draft_lines[index] if index < len(draft_lines) else None
+        if old is None:
+            right.append({"kind": "added", "text": new})
+        elif new is None:
+            left.append({"kind": "removed", "text": old})
+        elif old == new:
+            left.append({"kind": "same", "text": old})
+            right.append({"kind": "same", "text": new})
+        else:
+            left.append({"kind": "removed", "text": old})
+            right.append({"kind": "added", "text": new})
     return left, right
 
 

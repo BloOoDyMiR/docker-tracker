@@ -249,16 +249,24 @@ function paintEnv() {
   }
   const file = envLines(fileEl.value);
   const draft = envLines(draftEl.value);
-  const fileSet = new Set(file);
-  const draftSet = new Set(draft);
   const line = (value, kind) =>
     `<div class="env-line env-${kind}">${escapeHtml(value) || " "}</div>`;
-  leftEl.innerHTML = (file.length ? file : [""])
-    .map((value) => line(value, draftSet.has(value) ? "same" : "removed"))
-    .join("");
-  rightEl.innerHTML = (draft.length ? draft : [""])
-    .map((value) => line(value, fileSet.has(value) ? "same" : "added"))
-    .join("");
+  const leftCount = Math.max(file.length, 1);
+  const rightCount = Math.max(draft.length, 1);
+  const left = [];
+  const right = [];
+  for (let index = 0; index < leftCount; index += 1) {
+    const old = file[index] ?? "";
+    const changed = index >= draft.length || file[index] !== draft[index];
+    left.push(line(file.length ? old : "", changed && file.length ? "removed" : "same"));
+  }
+  for (let index = 0; index < rightCount; index += 1) {
+    const value = draft[index] ?? "";
+    const changed = index >= file.length || draft[index] !== file[index];
+    right.push(line(draft.length ? value : "", changed && draft.length ? "added" : "same"));
+  }
+  leftEl.innerHTML = left.join("");
+  rightEl.innerHTML = right.join("");
 }
 
 const envDraft = document.querySelector("#env-draft");
@@ -271,6 +279,7 @@ if (envDraft) {
       view.scrollLeft = envDraft.scrollLeft;
     }
   });
+  paintEnv();
 }
 
 function escapeHtml(text) {
