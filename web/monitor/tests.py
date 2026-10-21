@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from monitor.envfile import diff_env, mask_value, parse_env
+from monitor.envfile import diff_env, mask_value, parse_env, side_lines
 
 from monitor.models import EnvName, EnvRevision, NoteEnv, Project, UserContainer, clean_env_path, set_user_containers
 from monitor.present import tone
@@ -111,6 +111,7 @@ class MonitorPageTests(TestCase):
         self.assertLess(body.index('class="stack-name">voip'), body.index('class="stack-name">Other'))
         self.assertLess(body.index("voip-web-1"), body.index('class="stack-name">Other'))
         self.assertLess(body.index('class="stack-name">Other'), body.index("track-demo"))
+        self.assertContains(response, 'id="stack-search"')
 
     def test_explain_without_local_model_shows_setup(self):
         self.client.force_login(self.owner)
@@ -271,6 +272,10 @@ class EnvFileTests(TestCase):
         self.assertEqual(clean_env_path("../secret.env"), "")
         self.assertEqual(clean_env_path("/etc/passwd"), "")
         self.assertEqual(clean_env_path("Mongo 7 config/.env"), "Mongo 7 config/.env")
+        left, right = side_lines("TOKEN=old\nGONE=1\n", "TOKEN=new\nNEW=1\n")
+        self.assertEqual(left[0]["kind"], "removed")
+        self.assertEqual(right[1]["kind"], "added")
+        self.assertEqual(left[1]["text"], "GONE=1")
 
 
 class EnvPageTests(MonitorPageTests):
@@ -288,24 +293,23 @@ class EnvPageTests(MonitorPageTests):
             "container": self.shop,
             "stats": {"cpu_percent": 0, "mem_usage_mb": 1, "mem_limit_mb": 2},
         }
-        EnvRevision.objects.create(
+        revision = EnvRevision.objects.create(
             project=self.project,
             container_name="shop-web",
             body="TOKEN=sk-live-aaaaaa\nGONE=1\n",
             created_by=self.owner,
         )
         self.client.force_login(self.owner)
-        response = self.client.get(reverse("monitor:container_detail", args=["shop-web"]))
+        response = self.client.get(reverse("monitor:container_detail", args=["shop-web"]) + f"?draft={revision.id}")
         self.assertContains(response, "File now")
+        self.assertContains(response, "Your changes")
         self.assertContains(response, "shop/.env")
         self.assertContains(response, "TOKEN=sk-live-zzzzzz")
-        self.assertContains(response, "env-changed")
-        self.assertContains(response, "env-added")
         self.assertContains(response, "env-removed")
-        self.assertContains(response, "sk-…zzzz")
-        self.assertContains(response, 'data-value="sk-live-zzzzzz"')
+        self.assertContains(response, "env-added")
         self.assertContains(response, "ada")
         self.assertContains(response, "shop-web")
+        self.assertRegex(response.content.decode(), r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
         read_project_env.assert_called_once_with("shop/.env")
         get_logs.assert_called()
 
@@ -352,9 +356,8 @@ class EnvPageTests(MonitorPageTests):
         saved = EnvRevision.objects.get(container_name="shop-web")
         self.assertEqual(saved.created_by, self.owner)
         self.assertEqual(saved.project, self.project)
-        self.assertContains(response, "sup…alue")
         self.assertContains(response, "ada")
-        self.assertNotContains(response, ">super-secret-value<")
+        self.assertContains(response, "API_TOKEN=super-secret-value")
         write_project_env.assert_called_once_with("shop/.env", "API_TOKEN=super-secret-value\n")
         get_logs.assert_called()
 

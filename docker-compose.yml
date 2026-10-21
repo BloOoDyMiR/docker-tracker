@@ -9,19 +9,19 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_DIR:-./projects}:/projects
     ports:
-      - "127.0.0.1:8001:8001"
+      - "127.0.0.1:8282:8282"
     restart: unless-stopped
 
   web:
     build: ./web
     env_file: .env
     environment:
-      AGENT_URL: http://agent:8001
+      AGENT_URL: http://agent:8282
       SQLITE_PATH: /data/db.sqlite3
     volumes:
       - django-data:/data
     ports:
-      - "8000:8000"
+      - "7777:8000"
     depends_on:
       - agent
     restart: unless-stopped

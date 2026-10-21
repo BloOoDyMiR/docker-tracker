@@ -157,6 +157,24 @@ button:hover { background: #27272a; }
   gap: 16px;
 }
 
+.search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+.search input {
+  flex: 1;
+  max-width: 420px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font: inherit;
+  color: inherit;
+  background: white;
+}
 .stack { margin-top: 28px; }
 .stack-name {
   margin: 0;
@@ -490,6 +508,60 @@ button:disabled {
 
 .env-diff td, .env-diff th { font-family: var(--mono); }
 
+.env-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.env-history li { display: flex; gap: 10px; align-items: baseline; color: var(--muted); }
+.env-history a { font-family: var(--mono); font-size: 0.86rem; }
+.env-history a.is-on { font-weight: 650; }
+.env-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 14px;
+}
+.env-split h3 { margin: 0 0 8px; font-size: 0.95rem; }
+.env-code {
+  min-height: 320px;
+  max-height: 560px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fafafa;
+  color: #18181b;
+  font: 0.82rem/1.5 var(--mono);
+  white-space: pre;
+  box-sizing: border-box;
+}
+.env-line { min-height: 1.5em; }
+.env-line.env-removed { background: var(--bad-bg); }
+.env-line.env-added { background: var(--ok-bg); }
+.env-editor { position: relative; }
+.env-editor textarea {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: transparent;
+  color: transparent;
+  caret-color: #18181b;
+  resize: none;
+  font: 0.82rem/1.5 var(--mono);
+  white-space: pre;
+  overflow: auto;
+  box-sizing: border-box;
+}
 .env-added td { background: var(--ok-bg); }
 .env-removed td { background: var(--bad-bg); }
 .env-changed td { background: var(--warn-bg); }
@@ -517,6 +589,9 @@ button:disabled {
   }
 
   .board { grid-template-columns: 1fr; gap: 10px; }
+  .search { align-items: stretch; flex-direction: column; }
+  .search input { max-width: none; }
+  .env-split { grid-template-columns: 1fr; }
 
   .widget { min-height: 0; padding: 16px; }
 

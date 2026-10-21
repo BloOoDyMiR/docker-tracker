@@ -1,5 +1,7 @@
 import json
 import re
+from datetime import timedelta, timezone as dt_timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -12,7 +14,7 @@ from django.shortcuts import redirect
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .envfile import MAX_ENV_CHARS, MAX_REVISIONS, diff_env, parse_env
+from .envfile import MAX_ENV_CHARS, parse_env, side_lines
 from .models import SLUG_RE, ContainerNote, EnvRevision, Project
 from .present import present_container
 from .rendering import render_page
@@ -22,6 +24,10 @@ from .services.llm import LLMError, LLMNotConfigured, configured, explain_chunks
 
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,200}$")
 LOG_TAILS = {200, 500, 1000, 2000}
+try:
+    TEHRAN = ZoneInfo("Asia/Tehran")
+except ZoneInfoNotFoundError:
+    TEHRAN = dt_timezone(timedelta(hours=3, minutes=30))
 
 
 class PageLoginView(LoginView):
@@ -185,12 +191,13 @@ def _project_for(container):
 
 
 def _revision_label(revision):
-    local = timezone.localtime(revision.created_at)
+    local = timezone.localtime(revision.created_at, TEHRAN)
     author = revision.created_by.get_username() if revision.created_by_id else "unknown"
+    when = f"{local:%Y-%m-%d %H:%M:%S}"
     return {
         "id": revision.id,
-        "label": f"{local:%Y-%m-%d %H:%M} · {author} · {revision.container_name}",
-        "when": f"{local:%Y-%m-%d %H:%M}",
+        "label": f"{when} · {author} · {revision.container_name}",
+        "when": when,
         "who": author,
         "container": revision.container_name,
     }
@@ -226,7 +233,7 @@ def _revisions_for(target):
         found = EnvRevision.objects.filter(project=target["project"])
     else:
         return []
-    return list(found.select_related("created_by")[:MAX_REVISIONS])
+    return list(found.select_related("created_by"))
 
 
 def _env_context(request, container):
@@ -257,27 +264,11 @@ def _env_context(request, container):
         except AgentError as exc:
             env_error = str(exc)
             editable = False
-    by_id = {revision.id: revision for revision in revisions}
-    new_raw = request.GET.get("new")
-    new_id = _chosen_id(new_raw, by_id)
-    if editable and (new_raw == "file" or (new_id is None and new_raw in (None, ""))):
-        new_id = "file"
-    elif new_id is None:
-        new_id = "file" if editable else None
-    old_id = _chosen_id(request.GET.get("old"), by_id)
-    if old_id is None and "old" not in request.GET and revisions and new_id == "file":
-        old_id = revisions[0].id
-    if old_id == new_id:
-        old_id = None
-    old_body = by_id[old_id].body if old_id in by_id else ""
-    if new_id == "file":
-        new_body = file_text
-    elif new_id in by_id:
-        new_body = by_id[new_id].body
-    else:
-        new_body = ""
-    rows = diff_env(parse_env(old_body), parse_env(new_body)) if editable else []
     labels = [_revision_label(revision) for revision in revisions]
+    by_id = {revision.id: revision for revision in revisions}
+    draft_id = _chosen_id(request.GET.get("draft"), by_id) if editable else None
+    env_draft = by_id[draft_id].body if draft_id in by_id else file_text
+    env_left, env_right = side_lines(file_text, env_draft) if editable else ([], [])
     return {
         "env_project": project,
         "env_compose": target.get("compose") or "",
@@ -286,9 +277,10 @@ def _env_context(request, container):
         "env_missing": missing,
         "env_editable": editable,
         "env_revisions": labels,
-        "env_old_id": old_id,
-        "env_new_id": new_id,
-        "env_rows": rows,
+        "env_draft_id": draft_id,
+        "env_draft": env_draft if editable else "",
+        "env_left": env_left,
+        "env_right": env_right,
         "live_env": file_text if editable else "",
     }
 
@@ -327,14 +319,6 @@ def env_save(request, name):
         body=body,
         created_by=request.user,
     )
-    scope = (
-        EnvRevision.objects.filter(env_path=target["path"])
-        if target.get("compose")
-        else EnvRevision.objects.filter(project=target.get("project"))
-    )
-    stale = list(scope.order_by("-created_at", "-id").values_list("id", flat=True)[MAX_REVISIONS:])
-    if stale:
-        EnvRevision.objects.filter(id__in=stale).delete()
     messages.success(
         request,
         f"Saved {target['path']}. Recreate the stack when you want this file to take effect.",

@@ -18,12 +18,15 @@
   <p class="error">{{ agent_error }}</p>
 {% endif %}
 {% if containers %}
+  <label class="search">Search projects
+    <input id="stack-search" type="search" placeholder="voip, km, …" autocomplete="off">
+  </label>
   {% for group in groups %}
-    <section class="stack">
+    <section class="stack" data-stack="{{ group.name }}">
       <h2 class="stack-name">{{ group.name }}</h2>
       <div class="board">
         {% for container in group.containers %}
-          <a class="widget" href="{{ url('monitor:container_detail', container.name) }}" style="animation-delay: {{ loop.index0 * 0.04 }}s">
+          <a class="widget" data-name="{{ container.name }}" href="{{ url('monitor:container_detail', container.name) }}" style="animation-delay: {{ loop.index0 * 0.04 }}s">
             <header>
               <span class="dot {{ container.tone }}"></span>
               <span class="status {{ container.tone }}">{{ container.status }}</span>

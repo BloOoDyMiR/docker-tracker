@@ -211,12 +211,65 @@ if (logEl && logEl.dataset.url) {
   applyLogs(rawLogs, false);
 }
 
-const envShow = document.querySelector("#env-show");
-if (envShow) {
-  envShow.addEventListener("change", () => {
-    document.querySelectorAll(".env-val").forEach((cell) => {
-      cell.textContent = envShow.checked ? cell.dataset.value || "" : cell.dataset.masked || "";
+const stackSearch = document.querySelector("#stack-search");
+if (stackSearch) {
+  stackSearch.addEventListener("input", () => {
+    const query = stackSearch.value.trim().toLowerCase();
+    document.querySelectorAll(".stack").forEach((stack) => {
+      const stackName = (stack.dataset.stack || "").toLowerCase();
+      const cards = [...stack.querySelectorAll(".widget")];
+      const stackHit = query && stackName.includes(query);
+      let any = false;
+      cards.forEach((card) => {
+        const name = (card.dataset.name || "").toLowerCase();
+        const hit = !query || stackHit || name.includes(query);
+        card.hidden = !hit;
+        any = any || hit;
+      });
+      stack.hidden = !any;
     });
+  });
+}
+
+function envLines(text) {
+  const lines = String(text || "").split("\n");
+  if (lines.length && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+  return lines;
+}
+
+function paintEnv() {
+  const fileEl = document.querySelector("#env-file");
+  const draftEl = document.querySelector("#env-draft");
+  const leftEl = document.querySelector("#env-left-view");
+  const rightEl = document.querySelector("#env-right-view");
+  if (!fileEl || !draftEl || !leftEl || !rightEl) {
+    return;
+  }
+  const file = envLines(fileEl.value);
+  const draft = envLines(draftEl.value);
+  const fileSet = new Set(file);
+  const draftSet = new Set(draft);
+  const line = (value, kind) =>
+    `<div class="env-line env-${kind}">${escapeHtml(value) || " "}</div>`;
+  leftEl.innerHTML = (file.length ? file : [""])
+    .map((value) => line(value, draftSet.has(value) ? "same" : "removed"))
+    .join("");
+  rightEl.innerHTML = (draft.length ? draft : [""])
+    .map((value) => line(value, fileSet.has(value) ? "same" : "added"))
+    .join("");
+}
+
+const envDraft = document.querySelector("#env-draft");
+if (envDraft) {
+  envDraft.addEventListener("input", paintEnv);
+  envDraft.addEventListener("scroll", () => {
+    const view = document.querySelector("#env-right-view");
+    if (view) {
+      view.scrollTop = envDraft.scrollTop;
+      view.scrollLeft = envDraft.scrollLeft;
+    }
   });
 }
 

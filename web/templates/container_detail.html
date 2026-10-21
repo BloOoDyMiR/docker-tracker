@@ -44,9 +44,6 @@
   <section>
     <div class="title-row">
       <h2>Env</h2>
-      {% if env_rows %}
-        <label class="log-check"><input type="checkbox" id="env-show"> Show values</label>
-      {% endif %}
     </div>
     {% if env_path %}
       <p class="hint">This is {{ env_path }}{% if env_compose %}, shared by every service in {{ env_compose }}{% elif env_project %} for {{ env_project.name }}{% endif %}. Saving writes that file. Recreate the stack when you want the new values to take effect. Explain does not receive the values.</p>
@@ -58,56 +55,44 @@
       <p class="hint">This file is not there yet. Saving creates it.</p>
     {% endif %}
     {% if env_revisions %}
-      <table>
-        <thead><tr><th>When</th><th>Who</th><th>Container</th></tr></thead>
-        <tbody>
-          {% for rev in env_revisions %}
-            <tr>
-              <td>{{ rev.when }}</td>
-              <td>{{ rev.who }}</td>
-              <td>{{ rev.container }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <ul class="env-history">
+        {% for rev in env_revisions %}
+          <li>
+            <a href="{{ url('monitor:container_detail', container.name) }}?draft={{ rev.id }}" {% if rev.id == env_draft_id %}class="is-on"{% endif %}>{{ rev.when }}</a>
+            <span>{{ rev.who }} · {{ rev.container }}</span>
+          </li>
+        {% endfor %}
+      </ul>
     {% endif %}
     {% if env_editable %}
-      {% if env_revisions or live_env %}
-        <form method="get" class="env-pick" action="{{ url('monitor:container_detail', container.name) }}">
-          <label>Previous
-            <select name="old">
-              <option value="" {% if not env_old_id %}selected{% endif %}>None</option>
-              {% for rev in env_revisions %}
-                <option value="{{ rev.id }}" {% if rev.id == env_old_id %}selected{% endif %}>{{ rev.label }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label>Current
-            <select name="new">
-              <option value="file" {% if env_new_id == "file" %}selected{% endif %}>File now</option>
-              {% for rev in env_revisions %}
-                <option value="{{ rev.id }}" {% if rev.id == env_new_id %}selected{% endif %}>{{ rev.label }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <button type="submit">Compare</button>
-        </form>
-        <table class="env-diff">
-          <thead><tr><th>Name</th><th>Previous</th><th>Current</th></tr></thead>
-          <tbody>
-            {% for row in env_rows %}
-              <tr class="env-{{ row.kind }}">
-                <td><code>{{ row.name }}</code></td>
-                <td class="env-val" data-masked="{{ row.old_masked }}" data-value="{{ row.old_value }}">{{ row.old_masked }}</td>
-                <td class="env-val" data-masked="{{ row.new_masked }}" data-value="{{ row.new_value }}">{{ row.new_masked }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% endif %}
       <form method="post" action="{{ url('monitor:env_save', container.name) }}" class="env-save">
         <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
-        <textarea name="body" rows="12" spellcheck="false" placeholder="DATABASE_URL=postgres://…">{{ live_env }}</textarea>
+        <div class="env-split" id="env-split">
+          <div>
+            <h3>File now</h3>
+            <div class="env-code" id="env-left-view">
+              {% for line in env_left %}
+                <div class="env-line env-{{ line.kind }}">{{ line.text }}</div>
+              {% else %}
+                <div class="env-line env-same"> </div>
+              {% endfor %}
+            </div>
+          </div>
+          <div>
+            <h3>Your changes</h3>
+            <div class="env-editor">
+              <div class="env-code" id="env-right-view">
+                {% for line in env_right %}
+                  <div class="env-line env-{{ line.kind }}">{{ line.text }}</div>
+                {% else %}
+                  <div class="env-line env-same"> </div>
+                {% endfor %}
+              </div>
+              <textarea name="body" id="env-draft" spellcheck="false">{{ env_draft }}</textarea>
+            </div>
+          </div>
+        </div>
+        <textarea id="env-file" hidden readonly>{{ live_env }}</textarea>
         <button type="submit">Save env</button>
       </form>
     {% endif %}

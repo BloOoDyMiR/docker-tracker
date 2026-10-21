@@ -35,6 +35,23 @@ def mask_value(value):
     return f"{value[:3]}…{value[-4:]}"
 
 
+def side_lines(file_text, draft_text):
+    """Color the file lines missing from the draft, and draft lines that are new."""
+    file_lines = (file_text or "").splitlines()
+    draft_lines = (draft_text or "").splitlines()
+    file_set = set(file_lines)
+    draft_set = set(draft_lines)
+    left = [
+        {"kind": "same" if line in draft_set else "removed", "text": line}
+        for line in file_lines
+    ]
+    right = [
+        {"kind": "same" if line in file_set else "added", "text": line}
+        for line in draft_lines
+    ]
+    return left, right
+
+
 def diff_env(old, new):
     rows = []
     names = sorted(set(old) | set(new))
