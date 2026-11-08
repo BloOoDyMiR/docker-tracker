@@ -153,6 +153,8 @@ class EnvRevision(models.Model):
 
     class Meta:
         ordering = ["-created_at", "-id"]
+        verbose_name = "env history"
+        verbose_name_plural = "Env history"
 
     def __str__(self):
         return f"{self.container_name} @ {self.created_at:%Y-%m-%d %H:%M}"

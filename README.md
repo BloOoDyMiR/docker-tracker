@@ -53,6 +53,6 @@ An empty token is sent without an `Authorization` header. The request also sets 
 
 Create a user and tick Containers this user can see. The list is every container the agent can see. Superusers are not limited by those ticks.
 
-Containers from one Compose stack are grouped on the home page. In Admin, open a project, set its slug to that stack name, and choose the env folder. Those folders come from `ENV_DIR` (for example `/home/mj/Projects/Projects_ENV/CCS_analyse/.env`). Opening any service in the stack loads that file. Saving writes it and records who saved it, when, and from which container. Recreate the stack when the new values should take effect. Explain still receives names only, never the file.
+Containers from one Compose stack are grouped on the home page. Admin lists those same stack names. Open one and choose its env folder, or add a name by hand when that stack is not running. Those folders come from `ENV_DIR` (for example `/home/mj/Projects/Projects_ENV/CCS_analyse/.env`). Opening any service in the stack loads that file. Saving writes it and records who saved it, when, and from which container. Recreate the stack when the new values should take effect. Explain still receives names only, never the file.
 
 Optional container notes store a Dockerfile and env names (set or missing, never the value) for the Explain action.

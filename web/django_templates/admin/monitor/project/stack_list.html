@@ -1,0 +1,35 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<p>Select a project, then assign its env file. Running stacks come from the containers on the home page.</p>
+{% if warning %}
+  <p class="errornote">{{ warning }}</p>
+{% endif %}
+{% if add_url %}
+  <p><a class="button" href="{{ add_url }}">Add a project</a></p>
+{% endif %}
+<table id="result_list">
+  <thead>
+    <tr>
+      <th scope="col">Project</th>
+      <th scope="col">Env file</th>
+      <th scope="col">Source</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+      <tr>
+        <th scope="row">
+          {% if row.url %}<a href="{{ row.url }}">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}
+        </th>
+        <td>{% if row.env_path %}{{ row.env_path }}{% else %}—{% endif %}</td>
+        <td>{{ row.source }}</td>
+      </tr>
+    {% empty %}
+      <tr>
+        <td colspan="3">No projects yet. Add one, or start the agent so running stacks appear.</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

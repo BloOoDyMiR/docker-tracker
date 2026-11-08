@@ -1,27 +1,39 @@
 import re
+from urllib.parse import urlencode
 
 from django import forms
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.models import User
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.template.response import TemplateResponse
+from django.urls import reverse
 
-from .models import ContainerNote, EnvName, EnvRevision, NoteEnv, Project, set_user_containers
+from .models import SLUG_RE, EnvRevision, Project, set_user_containers
 from .services import agent as agent_api
 from .services.agent import AgentError
 
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,200}$")
 
 
-class EnvNameInline(admin.TabularInline):
-    model = EnvName
-    extra = 1
-    fields = ("name", "is_set")
-
-
-class NoteEnvInline(admin.TabularInline):
-    model = NoteEnv
-    extra = 1
-    fields = ("name", "is_set")
+def discovered_stacks():
+    """Compose project names the home page already uses as stack headings."""
+    try:
+        rows = agent_api.list_containers()
+    except AgentError as exc:
+        return [], str(exc)
+    found = []
+    seen = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = (row.get("compose_project") or "").strip()
+        if not name or name in seen or not SLUG_RE.fullmatch(name):
+            continue
+        seen.add(name)
+        found.append(name)
+    found.sort(key=str.lower)
+    return found, ""
 
 
 def env_path_choices(current=""):
@@ -38,38 +50,120 @@ def env_path_choices(current=""):
 
 
 class ProjectAdminForm(forms.ModelForm):
+    stack = forms.ChoiceField(required=False, label="Project")
+    manual_name = forms.CharField(
+        required=False,
+        label="Or type a project name",
+        max_length=80,
+        help_text="Use this when the stack is not running yet, or it has no Compose name.",
+    )
+
     class Meta:
         model = Project
-        fields = "__all__"
+        fields = ("env_path",)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        current = self.instance.env_path if self.instance and self.instance.pk else ""
-        self.fields["env_path"].widget = forms.Select(choices=env_path_choices(current))
-        self.fields["env_path"].help_text = (
-            "Choose a folder from the env directory. Leave empty if this project has no file yet."
-        )
+        stacks, warning = discovered_stacks()
+        current = self.instance.slug if self.instance and self.instance.pk else ""
+        posted = ""
+        if self.is_bound:
+            posted = (self.data.get(self.add_prefix("stack")) or "").strip()
+        initial_stack = (self.initial.get("stack") or "").strip()
+        choices = [("", "— Select a running project —")]
+        seen = {""}
+        for name in stacks:
+            choices.append((name, name))
+            seen.add(name)
+        for name in (current, posted, initial_stack):
+            if name and name not in seen and SLUG_RE.fullmatch(name):
+                choices.append((name, name))
+                seen.add(name)
+        self.fields["stack"].choices = choices
+        if current:
+            self.fields["stack"].initial = current
+        if warning:
+            self.fields["stack"].help_text = (
+                f"{warning} You can still type a project name below."
+            )
+        else:
+            self.fields["stack"].help_text = "These are the stacks on the home page."
+        current_env = self.instance.env_path if self.instance and self.instance.pk else ""
+        self.fields["env_path"].widget = forms.Select(choices=env_path_choices(current_env))
+        self.fields["env_path"].help_text = "Choose the env folder for the project you selected."
+
+    def clean(self):
+        cleaned = super().clean()
+        stack = (cleaned.get("stack") or "").strip()
+        manual = (cleaned.get("manual_name") or "").strip()
+        chosen = manual or stack
+        if not chosen:
+            raise ValidationError("Select a project, or type a name.")
+        if not SLUG_RE.fullmatch(chosen):
+            self.add_error(
+                "manual_name",
+                "Use letters, numbers, hyphens, and underscores. Start with a letter or number.",
+            )
+            return cleaned
+        taken = Project.objects.filter(slug=chosen)
+        if self.instance.pk:
+            taken = taken.exclude(pk=self.instance.pk)
+        if taken.exists():
+            raise ValidationError("That project is already in the list. Open it and assign the env file there.")
+        self.instance.slug = chosen
+        self.instance.name = chosen
+        return cleaned
 
 
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
     form = ProjectAdminForm
-    list_display = ("name", "slug", "env_path")
-    search_fields = ("name", "slug", "env_path")
-    prepopulated_fields = {"slug": ("name",)}
-    filter_horizontal = ("members",)
-    inlines = [EnvNameInline]
-    fieldsets = (
-        (None, {"fields": ("name", "slug", "env_path", "members")}),
-        ("Dockerfile", {"fields": ("dockerfile",)}),
-    )
+    change_list_template = "admin/monitor/project/stack_list.html"
+    fieldsets = ((None, {"fields": ("stack", "manual_name", "env_path")}),)
 
+    def get_changeform_initial_data(self, request):
+        initial = super().get_changeform_initial_data(request)
+        stack = (request.GET.get("stack") or "").strip()
+        if SLUG_RE.fullmatch(stack):
+            initial["stack"] = stack
+        return initial
 
-@admin.register(EnvName)
-class EnvNameAdmin(admin.ModelAdmin):
-    list_display = ("name", "project", "is_set")
-    list_filter = ("is_set", "project")
-    search_fields = ("name", "project__name")
+    def changelist_view(self, request, extra_context=None):
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied
+        stacks, warning = discovered_stacks()
+        running = set(stacks)
+        saved = {project.slug: project for project in Project.objects.all()}
+        rows = []
+        for name in sorted(running | set(saved), key=str.lower):
+            project = saved.get(name)
+            if project is not None:
+                url = reverse("admin:monitor_project_change", args=[project.pk])
+                env_path = project.env_path
+            elif self.has_add_permission(request):
+                url = f"{reverse('admin:monitor_project_add')}?{urlencode({'stack': name})}"
+                env_path = ""
+            else:
+                url = ""
+                env_path = ""
+            rows.append(
+                {
+                    "name": name,
+                    "env_path": env_path,
+                    "source": "Running" if name in running else "Added by hand",
+                    "url": url,
+                }
+            )
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Projects",
+            "subtitle": "Select a project, then assign its env file.",
+            "rows": rows,
+            "warning": warning,
+            "opts": self.model._meta,
+            "add_url": reverse("admin:monitor_project_add") if self.has_add_permission(request) else "",
+        }
+        return TemplateResponse(request, self.change_list_template, context)
 
 
 @admin.register(EnvRevision)
@@ -80,13 +174,6 @@ class EnvRevisionAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
-
-
-@admin.register(ContainerNote)
-class ContainerNoteAdmin(admin.ModelAdmin):
-    list_display = ("container_name",)
-    search_fields = ("container_name",)
-    inlines = [NoteEnvInline]
 
 
 def _container_choices():

@@ -347,22 +347,82 @@ class EnvPageTests(MonitorPageTests):
         read_project_env.assert_called_once_with("Daria_creator/.env", root="env")
         get_logs.assert_called()
 
+    @patch("monitor.admin.agent_api.list_containers", return_value=[{"compose_project": "voip"}])
     @patch("monitor.admin.agent_api.list_env_files", return_value=["CCS_analyse/.env", "Daria_creator/.env"])
-    def test_admin_dropdown_lists_env_folders(self, list_env_files):
+    def test_admin_dropdown_lists_env_folders(self, list_env_files, list_containers):
         project = Project.objects.create(name="Old", slug="old", env_path="kept/.env")
         form = ProjectAdminForm(instance=project)
         values = [value for value, _label in form.fields["env_path"].widget.choices]
+        stacks = [value for value, _label in form.fields["stack"].choices]
         self.assertEqual(values[:3], ["", "CCS_analyse/.env", "Daria_creator/.env"])
         self.assertIn("kept/.env", values)
+        self.assertIn("voip", stacks)
+        self.assertIn("old", stacks)
         list_env_files.assert_called_once_with()
+        list_containers.assert_called_once_with()
 
+    @patch("monitor.admin.agent_api.list_containers", side_effect=AgentError("down"))
     @patch("monitor.admin.agent_api.list_env_files", side_effect=AgentError("down"))
-    def test_admin_dropdown_keeps_the_saved_path_when_the_agent_is_down(self, list_env_files):
+    def test_admin_dropdown_keeps_the_saved_path_when_the_agent_is_down(self, list_env_files, list_containers):
         project = Project.objects.create(name="Old", slug="old", env_path="kept/.env")
         form = ProjectAdminForm(instance=project)
         values = [value for value, _label in form.fields["env_path"].widget.choices]
         self.assertEqual(values, ["", "kept/.env"])
+        self.assertIn("old", [value for value, _label in form.fields["stack"].choices])
         list_env_files.assert_called_once_with()
+        list_containers.assert_called_once_with()
+
+    @patch("monitor.admin.agent_api.list_containers", return_value=[{"compose_project": "voip"}])
+    @patch("monitor.admin.agent_api.list_env_files", return_value=["Daria_creator/.env"])
+    def test_selecting_a_stack_assigns_its_env_file(self, list_env_files, list_containers):
+        form = ProjectAdminForm(data={"stack": "voip", "manual_name": "", "env_path": "Daria_creator/.env"})
+        self.assertTrue(form.is_valid(), form.errors)
+        project = form.save()
+        self.assertEqual(project.slug, "voip")
+        self.assertEqual(project.name, "voip")
+        self.assertEqual(project.env_path, "Daria_creator/.env")
+        list_env_files.assert_called()
+        list_containers.assert_called()
+
+    @patch("monitor.admin.agent_api.list_containers", return_value=[])
+    @patch("monitor.admin.agent_api.list_env_files", return_value=[])
+    def test_a_typed_name_is_saved_when_the_stack_is_not_running(self, list_env_files, list_containers):
+        form = ProjectAdminForm(data={"stack": "", "manual_name": "shop-next", "env_path": ""})
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save().slug, "shop-next")
+        list_env_files.assert_called()
+        list_containers.assert_called()
+
+    @patch(
+        "monitor.admin.agent_api.list_containers",
+        return_value=[
+            {"compose_project": "voip"},
+            {"compose_project": "voip"},
+            {"compose_project": "ccc-analyse"},
+            {"name": "loose"},
+        ],
+    )
+    def test_project_list_shows_running_stacks_and_saved_names(self, list_containers):
+        staff = User.objects.create_superuser("root", "root@example.com", "secret-pass-123")
+        self.client.force_login(staff)
+        response = self.client.get(reverse("admin:monitor_project_changelist"))
+        self.assertContains(response, "voip")
+        self.assertContains(response, "ccc-analyse")
+        self.assertContains(response, "shop")
+        self.assertNotContains(response, "loose")
+        self.assertContains(response, "Running")
+        self.assertContains(response, "Added by hand")
+        self.assertContains(response, "stack=voip")
+        list_containers.assert_called_once_with()
+
+    def test_admin_index_keeps_projects_and_env_history(self):
+        staff = User.objects.create_superuser("root", "root@example.com", "secret-pass-123")
+        self.client.force_login(staff)
+        response = self.client.get(reverse("admin:index"))
+        self.assertContains(response, "Projects")
+        self.assertContains(response, "Env history")
+        self.assertNotContains(response, "Env names")
+        self.assertNotContains(response, "Container notes")
 
     @patch("monitor.views.agent_api.read_project_env", return_value=("", True))
     @patch("monitor.views.agent_api.get_logs", return_value="")
