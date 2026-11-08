@@ -5,9 +5,11 @@ services:
       AGENT_TOKEN: ${AGENT_TOKEN}
       PROJECTS_ROOT: /projects
       HOST_PROJECTS_DIR: ${PROJECTS_DIR:-}
+      ENV_ROOT: /env-files
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_DIR:-./projects}:/projects
+      - ${ENV_DIR:-./env-files}:/env-files
     ports:
       - "127.0.0.1:8282:8001"
     restart: unless-stopped

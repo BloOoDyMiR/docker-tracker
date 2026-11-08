@@ -30,7 +30,7 @@ class Project(models.Model):
     slug = models.SlugField(
         max_length=80,
         unique=True,
-        help_text="Must match the track.project label on the container.",
+        help_text="Must match the Compose project name on the home page, or a track.project label.",
     )
     dockerfile = models.TextField(
         blank=True,
@@ -39,7 +39,7 @@ class Project(models.Model):
     env_path = models.CharField(
         max_length=200,
         blank=True,
-        help_text="File inside the projects folder, such as shop/.env. Not a server login.",
+        help_text="Folder from the env directory, such as CCS_analyse/.env.",
     )
     members = models.ManyToManyField(
         settings.AUTH_USER_MODEL,

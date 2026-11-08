@@ -8,7 +8,9 @@ from django.urls import reverse
 
 from monitor.envfile import diff_env, mask_value, parse_env, side_lines
 
+from monitor.admin import ProjectAdminForm
 from monitor.models import EnvName, EnvRevision, NoteEnv, Project, UserContainer, clean_env_path, set_user_containers
+from monitor.services.agent import AgentError
 from monitor.present import tone
 from monitor.services.llm import LLMNotConfigured, explain
 from monitor.services.redact import redact
@@ -310,7 +312,7 @@ class EnvPageTests(MonitorPageTests):
         self.assertContains(response, "ada")
         self.assertContains(response, "shop-web")
         self.assertRegex(response.content.decode(), r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
-        read_project_env.assert_called_once_with("shop/.env")
+        read_project_env.assert_called_once_with("shop/.env", root="env")
         get_logs.assert_called()
 
     @patch("monitor.views.agent_api.read_project_env", return_value=("TOKEN=sk-live-zzzzzz\n", False))
@@ -326,8 +328,41 @@ class EnvPageTests(MonitorPageTests):
         self.assertContains(response, "VOIP/.env")
         self.assertContains(response, "shared by every service in voip")
         self.assertContains(response, "TOKEN=sk-live-zzzzzz")
-        read_project_env.assert_called_once_with("VOIP/.env")
+        read_project_env.assert_called_once_with("VOIP/.env", root="projects")
         get_logs.assert_called()
+
+    @patch("monitor.views.agent_api.read_project_env", return_value=("FROM_FOLDER=1\n", False))
+    @patch("monitor.views.agent_api.get_logs", return_value="")
+    @patch("monitor.views.agent_api.get_container")
+    def test_admin_env_folder_overrides_the_compose_file(self, get_container, get_logs, read_project_env):
+        Project.objects.create(name="Voice", slug="voip", env_path="Daria_creator/.env")
+        get_container.return_value = {
+            "container": {**CONTAINER, "compose_project": "voip", "env_path": "VOIP/.env"},
+            "stats": {},
+        }
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("monitor:container_detail", args=["shop-web"]))
+        self.assertContains(response, "Daria_creator/.env")
+        self.assertContains(response, "FROM_FOLDER=1")
+        read_project_env.assert_called_once_with("Daria_creator/.env", root="env")
+        get_logs.assert_called()
+
+    @patch("monitor.admin.agent_api.list_env_files", return_value=["CCS_analyse/.env", "Daria_creator/.env"])
+    def test_admin_dropdown_lists_env_folders(self, list_env_files):
+        project = Project.objects.create(name="Old", slug="old", env_path="kept/.env")
+        form = ProjectAdminForm(instance=project)
+        values = [value for value, _label in form.fields["env_path"].widget.choices]
+        self.assertEqual(values[:3], ["", "CCS_analyse/.env", "Daria_creator/.env"])
+        self.assertIn("kept/.env", values)
+        list_env_files.assert_called_once_with()
+
+    @patch("monitor.admin.agent_api.list_env_files", side_effect=AgentError("down"))
+    def test_admin_dropdown_keeps_the_saved_path_when_the_agent_is_down(self, list_env_files):
+        project = Project.objects.create(name="Old", slug="old", env_path="kept/.env")
+        form = ProjectAdminForm(instance=project)
+        values = [value for value, _label in form.fields["env_path"].widget.choices]
+        self.assertEqual(values, ["", "kept/.env"])
+        list_env_files.assert_called_once_with()
 
     @patch("monitor.views.agent_api.read_project_env", return_value=("", True))
     @patch("monitor.views.agent_api.get_logs", return_value="")
@@ -358,7 +393,7 @@ class EnvPageTests(MonitorPageTests):
         self.assertEqual(saved.project, self.project)
         self.assertContains(response, "ada")
         self.assertContains(response, "API_TOKEN=super-secret-value")
-        write_project_env.assert_called_once_with("shop/.env", "API_TOKEN=super-secret-value\n")
+        write_project_env.assert_called_once_with("shop/.env", "API_TOKEN=super-secret-value\n", root="env")
         get_logs.assert_called()
 
     @patch("monitor.views.agent_api.read_project_env", return_value=("API_TOKEN=super-secret-value\n", False))
@@ -383,7 +418,7 @@ class EnvPageTests(MonitorPageTests):
         self.assertEqual(saved.container_name, "shop-web")
         self.assertEqual(saved.env_path, "VOIP/.env")
         self.assertIsNone(saved.project)
-        write_project_env.assert_called_once_with("VOIP/.env", "API_TOKEN=super-secret-value\n")
+        write_project_env.assert_called_once_with("VOIP/.env", "API_TOKEN=super-secret-value\n", root="projects")
         get_logs.assert_called()
 
     def test_project_rejects_parent_path(self):

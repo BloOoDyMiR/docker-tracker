@@ -1,8 +1,8 @@
 """Docker API and project .env files for the Django portal.
 
 Django calls this over the private network with AGENT_TOKEN. The browser never
-talks to this process, and this process never runs docker exec. Project files
-are read and written only inside PROJECTS_ROOT.
+talks to this process, and this process never runs docker exec. Compose files
+stay inside PROJECTS_ROOT. Assigned env folders stay inside ENV_ROOT.
 """
 
 import os
@@ -21,6 +21,7 @@ from access import (
     MAX_ENV_BYTES,
     cpu_percent,
     format_env,
+    list_env_folders,
     memory_mb,
     read_env_file,
     summarize,
@@ -139,6 +140,7 @@ def container_env(
 class EnvBody(BaseModel):
     path: str
     body: str
+    root: str = "projects"
 
 
 def projects_root():
@@ -148,13 +150,30 @@ def projects_root():
     return root
 
 
+def storage_root(which):
+    if which in ("", "projects"):
+        return projects_root()
+    if which == "env":
+        root = os.environ.get("ENV_ROOT", "")
+        if not root:
+            raise HTTPException(status_code=503, detail="The env folder is not mounted.")
+        return root
+    raise HTTPException(status_code=400, detail="That path is not allowed.")
+
+
+@app.get("/env-files")
+def env_files(_: None = Depends(require_token)):
+    return {"files": list_env_folders(storage_root("env"))}
+
+
 @app.get("/project/env")
 def project_env(
     path: str = Query(min_length=1, max_length=200),
+    root: str = Query(default="projects"),
     _: None = Depends(require_token),
 ):
     try:
-        text, missing = read_env_file(projects_root(), path)
+        text, missing = read_env_file(storage_root(root), path)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="That path is not allowed.") from exc
     except OSError as exc:
@@ -167,9 +186,9 @@ def save_project_env(payload: EnvBody, _: None = Depends(require_token)):
     if len(payload.body) > MAX_ENV_BYTES:
         raise HTTPException(status_code=400, detail="That env file is too large.")
     try:
-        write_env_file(projects_root(), payload.path, payload.body)
+        write_env_file(storage_root(payload.root), payload.path, payload.body)
     except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="That project folder is not in the projects directory.") from exc
+        raise HTTPException(status_code=404, detail="That folder is not in the mounted directory.") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="That path is not allowed.") from exc
     except OSError as exc:

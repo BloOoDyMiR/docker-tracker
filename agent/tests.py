@@ -8,6 +8,7 @@ from access import (
     compose_env_path,
     cpu_percent,
     format_env,
+    list_env_folders,
     memory_mb,
     read_env_file,
     summarize,
@@ -74,6 +75,14 @@ class AccessTests(unittest.TestCase):
         self.assertEqual(compose_env_path(root + "/Mongo 7 config", root), "Mongo 7 config/.env")
         self.assertEqual(compose_env_path("/etc/VOIP", root), "")
         self.assertEqual(compose_env_path(root + "-evil/x", root), "")
+        with tempfile.TemporaryDirectory() as env_root:
+            (Path(env_root) / "CCS_analyse").mkdir()
+            (Path(env_root) / "Daria_creator").mkdir()
+            (Path(env_root) / "skip.txt").write_text("no", encoding="utf-8")
+            self.assertEqual(
+                list_env_folders(env_root),
+                ["CCS_analyse/.env", "Daria_creator/.env"],
+            )
         with tempfile.TemporaryDirectory() as tmp:
             shop = Path(tmp) / "shop"
             shop.mkdir()

@@ -1,5 +1,6 @@
 import re
 
+from django import forms
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.models import User
@@ -23,10 +24,38 @@ class NoteEnvInline(admin.TabularInline):
     fields = ("name", "is_set")
 
 
+def env_path_choices(current=""):
+    choices = [("", "—")]
+    try:
+        files = agent_api.list_env_files()
+    except AgentError:
+        files = []
+    for path in files:
+        choices.append((path, path))
+    if current and current not in {value for value, _label in choices}:
+        choices.append((current, current))
+    return choices
+
+
+class ProjectAdminForm(forms.ModelForm):
+    class Meta:
+        model = Project
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        current = self.instance.env_path if self.instance and self.instance.pk else ""
+        self.fields["env_path"].widget = forms.Select(choices=env_path_choices(current))
+        self.fields["env_path"].help_text = (
+            "Choose a folder from the env directory. Leave empty if this project has no file yet."
+        )
+
+
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug")
-    search_fields = ("name", "slug")
+    form = ProjectAdminForm
+    list_display = ("name", "slug", "env_path")
+    search_fields = ("name", "slug", "env_path")
     prepopulated_fields = {"slug": ("name",)}
     filter_horizontal = ("members",)
     inlines = [EnvNameInline]

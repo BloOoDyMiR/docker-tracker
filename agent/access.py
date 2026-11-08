@@ -49,6 +49,29 @@ def compose_env_path(working_dir, host_root):
     return clean_env_path(relative)
 
 
+def list_env_folders(root):
+    """Direct child folders, each as name/.env. Skips hidden names and links."""
+    if not root:
+        return []
+    base = Path(root)
+    try:
+        children = list(base.iterdir())
+    except OSError:
+        return []
+    found = []
+    for child in children:
+        try:
+            if child.is_symlink() or not child.is_dir() or child.name.startswith("."):
+                continue
+        except OSError:
+            continue
+        relative = clean_env_path(f"{child.name}/.env")
+        if relative:
+            found.append(relative)
+    found.sort(key=str.lower)
+    return found
+
+
 def env_file(root, relative):
     cleaned = clean_env_path(relative)
     if not root or not cleaned:

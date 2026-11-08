@@ -211,19 +211,32 @@ def _chosen_id(raw, allowed):
     return value if value in allowed else None
 
 
+def _assigned_project(container):
+    container = container or {}
+    for key in (container.get("compose_project") or "", container.get("project") or ""):
+        if not SLUG_RE.fullmatch(key):
+            continue
+        found = Project.objects.filter(slug=key).exclude(env_path="").first()
+        if found is not None:
+            return found
+    return None
+
+
 def _file_target(container):
     container = container or {}
     compose = container.get("compose_project") or ""
     env_path = container.get("env_path") or ""
+    assigned = _assigned_project(container)
+    if assigned is not None:
+        return {"path": assigned.env_path, "compose": compose, "project": assigned, "root": "env"}
     project = _project_for(container)
     if compose and env_path:
-        return {"path": env_path, "compose": compose, "project": None}
+        return {"path": env_path, "compose": compose, "project": None, "root": "projects"}
     if compose and not env_path:
-        return {"path": "", "compose": compose, "project": None, "outside": True}
+        return {"path": "", "compose": compose, "project": None, "outside": True, "root": "projects"}
     if project is not None and project.env_path:
-        return {"path": project.env_path, "compose": "", "project": project}
-    slug = container.get("project") or ""
-    return {"path": "", "compose": "", "project": project, "slug": slug}
+        return {"path": project.env_path, "compose": "", "project": project, "root": "env"}
+    return {"path": "", "compose": "", "project": project, "slug": container.get("project") or "", "root": "projects"}
 
 
 def _revisions_for(target):
@@ -260,7 +273,7 @@ def _env_context(request, container):
         editable = False
     if editable:
         try:
-            file_text, missing = agent_api.read_project_env(target["path"])
+            file_text, missing = agent_api.read_project_env(target["path"], root=target.get("root") or "projects")
         except AgentError as exc:
             env_error = str(exc)
             editable = False
@@ -307,7 +320,7 @@ def env_save(request, name):
         messages.error(request, "Paste at least one NAME=value line.")
         return redirect("monitor:container_detail", name=name)
     try:
-        agent_api.write_project_env(target["path"], body)
+        agent_api.write_project_env(target["path"], body, root=target.get("root") or "projects")
     except AgentError as exc:
         messages.error(request, str(exc))
         return redirect("monitor:container_detail", name=name)

@@ -64,8 +64,21 @@ def get_env(name):
     return text
 
 
-def read_project_env(path):
-    payload = _request("GET", "/project/env", params={"path": path}, use_detail=True)
+def list_env_files():
+    payload = _request("GET", "/env-files", use_detail=True)
+    files = payload.get("files")
+    if not isinstance(files, list) or not all(isinstance(item, str) for item in files):
+        raise AgentError("The agent returned an unreadable response.")
+    return files
+
+
+def read_project_env(path, root="projects"):
+    payload = _request(
+        "GET",
+        "/project/env",
+        params={"path": path, "root": root},
+        use_detail=True,
+    )
     text = payload.get("env")
     missing = payload.get("missing")
     if not isinstance(text, str) or not isinstance(missing, bool):
@@ -73,8 +86,13 @@ def read_project_env(path):
     return text, missing
 
 
-def write_project_env(path, body):
-    _request("PUT", "/project/env", payload={"path": path, "body": body}, use_detail=True)
+def write_project_env(path, body, root="projects"):
+    _request(
+        "PUT",
+        "/project/env",
+        payload={"path": path, "body": body, "root": root},
+        use_detail=True,
+    )
 
 
 def get_logs(name, tail=200):
