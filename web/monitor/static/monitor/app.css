@@ -76,7 +76,7 @@ h2 { margin: 0 0 12px; font-size: 0.95rem; font-weight: 560; letter-spacing: 0.0
 }
 
 .top nav { display: flex; align-items: center; gap: 16px; }
-.top nav a { color: var(--muted); text-decoration: none; }
+.top nav a { color: var(--muted); text-decoration: none; transition: color 0.16s ease; }
 .top nav a:hover { color: var(--ink); }
 .who { color: var(--muted); font-family: var(--mono); font-size: 0.82rem; }
 
@@ -91,15 +91,18 @@ button {
   background: var(--ink);
   color: var(--bg);
   padding: 10px 16px;
+  transition: background 0.18s ease, transform 0.18s ease, color 0.18s ease, border-color 0.18s ease;
 }
 
 button:hover { background: #27272a; }
+button:active { transform: scale(0.98); }
 
 .linkish {
   background: transparent;
   color: var(--muted);
   padding: 0;
 }
+.linkish:active { transform: none; }
 
 .kicker {
   display: flex;
@@ -179,25 +182,51 @@ button:hover { background: #27272a; }
   font: inherit;
   color: var(--ink);
   background: white;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.search input:focus {
+  outline: none;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
 }
 section.stack {
   display: block;
   width: 100%;
   min-width: 0;
-  margin-top: 28px;
+  margin-top: 36px;
+  animation: rise 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+section.stack + section.stack {
+  margin-top: 32px;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
 }
 .stack-name {
+  position: relative;
   margin: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
   font-size: 1.05rem;
   letter-spacing: 0.04em;
+}
+.stack-name::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 72px;
+  height: 2px;
+  background: var(--ink);
+  transform-origin: left center;
+  animation: draw 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 .board {
   display: grid;
   width: 100%;
   min-width: 0;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: clamp(10px, 1vw, 16px);
-  margin-top: 12px;
+  margin-top: 16px;
 }
 
 .widget {
@@ -213,12 +242,17 @@ section.stack {
   border-radius: 22px;
   box-shadow: var(--shadow);
   animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.22s ease, border-color 0.22s ease;
 }
 
 .widget:hover {
-  transform: translateY(-3px);
+  transform: translateY(-4px);
   box-shadow: var(--shadow-lift);
-  border-color: #d4d4d8;
+  border-color: #bfdbfe;
+}
+
+.widget:active {
+  transform: translateY(-1px) scale(0.99);
 }
 
 .widget header, .widget dl {
@@ -261,7 +295,11 @@ section.stack {
   box-shadow: 0 0 0 4px rgba(113, 113, 122, 0.12);
 }
 
-.dot.ok { background: var(--ok); box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.15); }
+.dot.ok {
+  background: var(--ok);
+  box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.15);
+  animation: pulse 2.4s ease-in-out infinite;
+}
 .dot.warn { background: var(--warn); box-shadow: 0 0 0 4px rgba(180, 83, 9, 0.15); }
 .dot.bad { background: var(--bad); box-shadow: 0 0 0 4px rgba(225, 29, 72, 0.14); }
 
@@ -294,7 +332,17 @@ section { margin-top: 28px; }
   border-radius: 16px;
 }
 
-.facts div { padding: 12px 14px; }
+.facts div {
+  padding: 12px 14px;
+  animation: rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.facts div:nth-child(2) { animation-delay: 0.04s; }
+.facts div:nth-child(3) { animation-delay: 0.08s; }
+.facts div:nth-child(4) { animation-delay: 0.12s; }
+.facts div:nth-child(5) { animation-delay: 0.16s; }
+.facts div:nth-child(6) { animation-delay: 0.2s; }
+.facts div:nth-child(7) { animation-delay: 0.24s; }
+.facts div:nth-child(8) { animation-delay: 0.28s; }
 .facts dt { color: var(--muted); font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
 .facts dd { margin: 4px 0 0; font-family: var(--mono); font-size: 1.05rem; }
 
@@ -355,6 +403,7 @@ pre.file, #logs {
 .log-tools button.is-on {
   background: var(--ink);
   color: var(--bg);
+  animation: liveglow 1.6s ease-in-out infinite;
 }
 
 .log-check {
@@ -467,8 +516,23 @@ button:disabled {
 }
 
 @keyframes rise {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; translate: 0 12px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+@keyframes draw {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.16); }
+  50% { box-shadow: 0 0 0 8px rgba(5, 150, 105, 0.04); }
+}
+
+@keyframes liveglow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(9, 9, 11, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(9, 9, 11, 0.12); }
 }
 
 @keyframes spin {
@@ -537,6 +601,11 @@ button:disabled {
   border-radius: 999px;
   background: white;
   color: var(--muted);
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+.env-history li:hover {
+  transform: translateY(-1px);
+  border-color: #d4d4d8;
 }
 .env-history a { font-family: var(--mono); font-size: 0.82rem; }
 .env-history a.is-on { font-weight: 650; color: var(--ink); }
@@ -595,6 +664,10 @@ form.env-save > button { margin-top: 14px; }
 .env-removed td { background: var(--bad-bg); }
 .env-changed td { background: var(--warn-bg); }
 
+@media (max-width: 1100px) {
+  .board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (max-width: 720px) {
   .top {
     flex-wrap: wrap;
@@ -617,6 +690,7 @@ form.env-save > button { margin-top: 14px; }
     align-items: flex-start;
   }
 
+  .board { grid-template-columns: 1fr; }
   .search { align-items: stretch; flex-direction: column; }
   .env-code, .env-editor { height: 46vh; min-height: 220px; }
 
@@ -638,7 +712,16 @@ form.env-save > button { margin-top: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .widget { animation: none; }
-  .widget:hover { transform: none; }
+  .widget,
+  section.stack,
+  .facts div,
+  .stack-name::after,
+  .dot.ok,
+  .log-tools button.is-on,
   .spinner { animation: none; }
+  .widget,
+  .widget:hover,
+  .widget:active,
+  button:active,
+  .env-history li:hover { transform: none; }
 }
