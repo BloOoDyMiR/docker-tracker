@@ -42,7 +42,7 @@ main {
 }
 
 main.wide {
-  width: calc(100% - 40px);
+  width: calc(100% - clamp(20px, 2.4vw, 64px));
   max-width: none;
 }
 
@@ -131,7 +131,7 @@ button:hover { background: #27272a; }
 
 .narrow .kicker { margin-top: 0; }
 
-.stack { display: grid; gap: 8px; margin-top: 18px; }
+.narrow .stack { display: grid; gap: 8px; margin-top: 18px; }
 .stack input {
   font: inherit;
   padding: 10px 12px;
@@ -155,20 +155,24 @@ button:hover { background: #27272a; }
   justify-content: space-between;
   align-items: end;
   gap: 16px;
+  width: 100%;
 }
 
 .search {
   display: flex;
   align-items: center;
   gap: 12px;
+  width: 100%;
   margin-top: 18px;
   color: var(--muted);
   font-size: 0.92rem;
+  white-space: nowrap;
 }
 .search input {
-  flex: 1;
-  width: min(720px, 100%);
-  max-width: 720px;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -176,7 +180,12 @@ button:hover { background: #27272a; }
   color: var(--ink);
   background: white;
 }
-.stack { margin-top: 28px; }
+section.stack {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin-top: 28px;
+}
 .stack-name {
   margin: 0;
   font-size: 1.05rem;
@@ -184,8 +193,10 @@ button:hover { background: #27272a; }
 }
 .board {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
-  gap: 14px;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: clamp(10px, 1vw, 16px);
   margin-top: 12px;
 }
 
@@ -271,8 +282,9 @@ section { margin-top: 28px; }
 
 .facts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 10px;
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: clamp(8px, 1vw, 14px);
   margin: 18px 0 0;
 }
 
@@ -299,7 +311,7 @@ pre.file, #logs {
 }
 
 #logs {
-  max-height: 440px;
+  max-height: clamp(220px, 42vh, 640px);
   background: var(--log);
   color: var(--log-ink);
   border-radius: 18px;
@@ -464,8 +476,7 @@ button:disabled {
 }
 
 @media (min-width: 1800px) {
-  main.wide { width: calc(100% - 56px); }
-  .board { gap: 12px; }
+  .board { gap: 16px; }
   .widget {
     min-height: 0;
     padding: 14px 16px;
@@ -533,15 +544,17 @@ form.env-save { display: block; }
 form.env-save > button { margin-top: 14px; }
 .env-split {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: clamp(12px, 1.2vw, 20px);
   margin-top: 14px;
 }
 .env-split h3 { margin: 0 0 8px; font-size: 0.95rem; text-transform: none; letter-spacing: 0; color: var(--ink); }
 .env-code,
 .env-editor {
-  height: calc(100vh - 280px);
-  min-height: 320px;
+  height: clamp(220px, calc(100vh - 280px), 72vh);
+  min-height: 220px;
 }
 .env-code {
   overflow: auto;
@@ -604,10 +617,7 @@ form.env-save > button { margin-top: 14px; }
     align-items: flex-start;
   }
 
-  .board { grid-template-columns: 1fr; gap: 10px; }
   .search { align-items: stretch; flex-direction: column; }
-  .search input { max-width: none; }
-  .env-split { grid-template-columns: 1fr; }
   .env-code, .env-editor { height: 46vh; min-height: 220px; }
 
   .widget { min-height: 0; padding: 16px; }
