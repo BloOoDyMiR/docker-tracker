@@ -7,10 +7,21 @@ from django.db import models
 SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
 ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 ENV_PATH_PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,120}$")
+ENV_DOTFILE_RE = re.compile(r"^\.env(?:\.[A-Za-z0-9_-]+)*$")
+
+
+def env_filename(name):
+    """`.env`, `.env.develop`, or `prod.env`. Other names are refused."""
+    if ENV_DOTFILE_RE.fullmatch(name or ""):
+        return True
+    if (name or "").endswith(".env"):
+        stem = name[: -len(".env")]
+        return bool(stem) and bool(ENV_PATH_PART.fullmatch(stem))
+    return False
 
 
 def clean_env_path(value):
-    """Relative project file, such as shop/.env. Rejects absolute paths and '..'."""
+    """Relative env file, such as shop/.env or CCS_analyse/.env.develop."""
     text = (value or "").strip().replace("\\", "/")
     if not text or text.startswith("/"):
         return ""
@@ -20,7 +31,7 @@ def clean_env_path(value):
     dirs, name = parts[:-1], parts[-1]
     if any(not ENV_PATH_PART.fullmatch(part) for part in dirs):
         return ""
-    if name != ".env" and not (name.endswith(".env") and ENV_PATH_PART.fullmatch(name[: -len(".env")])):
+    if not env_filename(name):
         return ""
     return "/".join(parts)
 
@@ -39,7 +50,7 @@ class Project(models.Model):
     env_path = models.CharField(
         max_length=200,
         blank=True,
-        help_text="Folder from the env directory, such as CCS_analyse/.env.",
+        help_text="File from the env directory, such as CCS_analyse/.env.develop.",
     )
     members = models.ManyToManyField(
         settings.AUTH_USER_MODEL,

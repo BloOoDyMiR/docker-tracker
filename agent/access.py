@@ -8,6 +8,7 @@ PROJECT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
 CONTAINER_ID_RE = re.compile(r"^[a-f0-9]{12,64}$")
 CONTAINER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,200}$")
 ENV_PATH_PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,120}$")
+ENV_DOTFILE_RE = re.compile(r"^\.env(?:\.[A-Za-z0-9_-]+)*$")
 COMPOSE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
 MAX_ENV_BYTES = 100_000
 
@@ -18,8 +19,18 @@ def visible(labels, project):
     return labels.get("track.project") == project
 
 
+def env_filename(name):
+    """`.env`, `.env.develop`, or `prod.env`. Other names are refused."""
+    if ENV_DOTFILE_RE.fullmatch(name or ""):
+        return True
+    if (name or "").endswith(".env"):
+        stem = name[: -len(".env")]
+        return bool(stem) and bool(ENV_PATH_PART.fullmatch(stem))
+    return False
+
+
 def clean_env_path(value):
-    """Relative project file, such as shop/.env. Rejects absolute paths and '..'."""
+    """Relative env file, such as shop/.env or CCS_analyse/.env.develop."""
     text = (value or "").strip().replace("\\", "/")
     if not text or text.startswith("/"):
         return ""
@@ -29,7 +40,7 @@ def clean_env_path(value):
     dirs, name = parts[:-1], parts[-1]
     if any(not ENV_PATH_PART.fullmatch(part) for part in dirs):
         return ""
-    if name != ".env" and not (name.endswith(".env") and ENV_PATH_PART.fullmatch(name[: -len(".env")])):
+    if not env_filename(name):
         return ""
     return "/".join(parts)
 
@@ -50,7 +61,7 @@ def compose_env_path(working_dir, host_root):
 
 
 def list_env_folders(root):
-    """Direct child folders, each as name/.env. Skips hidden names and links."""
+    """Env files inside each direct child folder. An empty folder is listed as name/.env."""
     if not root:
         return []
     base = Path(root)
@@ -63,11 +74,24 @@ def list_env_folders(root):
         try:
             if child.is_symlink() or not child.is_dir() or child.name.startswith("."):
                 continue
+            entries = list(child.iterdir())
         except OSError:
             continue
-        relative = clean_env_path(f"{child.name}/.env")
-        if relative:
-            found.append(relative)
+        files = []
+        for entry in entries:
+            try:
+                if entry.is_symlink() or not entry.is_file():
+                    continue
+            except OSError:
+                continue
+            relative = clean_env_path(f"{child.name}/{entry.name}")
+            if relative:
+                files.append(relative)
+        if not files:
+            fallback = clean_env_path(f"{child.name}/.env")
+            if fallback:
+                files.append(fallback)
+        found.extend(files)
     found.sort(key=str.lower)
     return found
 

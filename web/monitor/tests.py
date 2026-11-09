@@ -274,6 +274,8 @@ class EnvFileTests(TestCase):
         self.assertEqual(clean_env_path("../secret.env"), "")
         self.assertEqual(clean_env_path("/etc/passwd"), "")
         self.assertEqual(clean_env_path("Mongo 7 config/.env"), "Mongo 7 config/.env")
+        self.assertEqual(clean_env_path("CCS_analyse/.env.develop"), "CCS_analyse/.env.develop")
+        self.assertEqual(clean_env_path("shop/notes.txt"), "")
         left, right = side_lines("TOKEN=old\nGONE=1\n", "TOKEN=new\nNEW=1\n")
         self.assertEqual(left[0]["kind"], "removed")
         self.assertEqual(right[1]["kind"], "added")

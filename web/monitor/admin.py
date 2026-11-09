@@ -90,7 +90,7 @@ class ProjectAdminForm(forms.ModelForm):
             self.fields["stack"].help_text = "These are the stacks on the home page."
         current_env = self.instance.env_path if self.instance and self.instance.pk else ""
         self.fields["env_path"].widget = forms.Select(choices=env_path_choices(current_env))
-        self.fields["env_path"].help_text = "Choose the env folder for the project you selected."
+        self.fields["env_path"].help_text = "Choose the env file for the project you selected."
 
     def clean(self):
         cleaned = super().clean()

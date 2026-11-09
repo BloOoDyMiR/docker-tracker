@@ -70,18 +70,26 @@ class AccessTests(unittest.TestCase):
         self.assertEqual(clean_env_path("../secret.env"), "")
         self.assertEqual(clean_env_path("/etc/passwd"), "")
         self.assertEqual(clean_env_path("Mongo 7 config/.env"), "Mongo 7 config/.env")
+        self.assertEqual(clean_env_path("CCS_analyse/.env.develop"), "CCS_analyse/.env.develop")
+        self.assertEqual(clean_env_path("shop/prod.env"), "shop/prod.env")
+        self.assertEqual(clean_env_path("shop/notes.txt"), "")
+        self.assertEqual(clean_env_path("shop/.env."), "")
         root = "/home/mj/Projects"
         self.assertEqual(compose_env_path(root + "/VOIP", root), "VOIP/.env")
         self.assertEqual(compose_env_path(root + "/Mongo 7 config", root), "Mongo 7 config/.env")
         self.assertEqual(compose_env_path("/etc/VOIP", root), "")
         self.assertEqual(compose_env_path(root + "-evil/x", root), "")
         with tempfile.TemporaryDirectory() as env_root:
-            (Path(env_root) / "CCS_analyse").mkdir()
+            analyse = Path(env_root) / "CCS_analyse"
+            analyse.mkdir()
+            (analyse / ".env").write_text("A=1\n", encoding="utf-8")
+            (analyse / ".env.develop").write_text("A=2\n", encoding="utf-8")
+            (analyse / "notes.txt").write_text("no", encoding="utf-8")
             (Path(env_root) / "Daria_creator").mkdir()
             (Path(env_root) / "skip.txt").write_text("no", encoding="utf-8")
             self.assertEqual(
                 list_env_folders(env_root),
-                ["CCS_analyse/.env", "Daria_creator/.env"],
+                ["CCS_analyse/.env", "CCS_analyse/.env.develop", "Daria_creator/.env"],
             )
         with tempfile.TemporaryDirectory() as tmp:
             shop = Path(tmp) / "shop"
